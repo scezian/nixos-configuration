@@ -54,5 +54,8 @@
   home.activation.copyHyprConfig = lib.hm.dag.entryAfter ["writeBoundary"] ''
       ${pkgs.rsync}/bin/rsync -a --update /etc/nixos/config/sessions/hyprland/config/ $HOME/.config/hypr/config/
       chmod -R u+w $HOME/.config/hypr/config
+      # Copy fixed keybinds from repo
+      ${pkgs.rsync}/bin/rsync -a --update ${../../../keybindings-fixed.conf} $HOME/.config/hypr/config/keybindings.conf
+      chmod u+w $HOME/.config/hypr/config/keybindings.conf
   '';
 }
