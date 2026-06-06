@@ -1270,6 +1270,17 @@ for folder in "${CONFIG_FOLDERS[@]}"; do
     fi
 done
 
+# --- 4.1 Overwrite keybindings.conf with scez's custom keybinds ---
+echo -e "\n${C_CYAN}[ INFO ]${RESET} Applying custom keybindings..."
+SCEZ_KEYBINDS_URL="https://raw.githubusercontent.com/scezian/nixos-configuration/master/config/sessions/hyprland/config/keybindings.conf"
+KEYBINDS_TARGET="$TARGET_CONFIG_DIR/hypr/config/keybindings.conf"
+
+if curl -fsSL "$SCEZ_KEYBINDS_URL" -o "$KEYBINDS_TARGET" 2>/dev/null; then
+    printf "  -> Custom keybindings applied %-15s ${C_GREEN}[ OK ]${RESET}\n" ""
+else
+    echo -e "  -> ${C_YELLOW}Could not fetch custom keybindings, keeping upstream defaults.${RESET}"
+fi
+
 # --- 4.5 Bake Hardware Variables into Template ---
 # By doing this now, we eliminate the need for the hacky hardware_env.conf file
 echo "  -> Baking hardware environment variables into template..."
