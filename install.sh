@@ -104,7 +104,6 @@ OPT_SDDM=false
 OPT_NVIM=false
 OPT_ZSH=false
 OPT_WALLPAPERS=false
-OPT_OVERRIDE_KEYBINDS=false
 OPT_OVERRIDE_STARTUPS=false
 
 INSTALL_NVIM=false
@@ -397,15 +396,13 @@ manage_packages() {
 }
 
 manage_drivers() {
+    # Drivers option removed - install drivers manually per your distro's wiki
+    VISITED_DRIVERS=true
+    return 0
+
     while true; do
         draw_header
         echo -e "${BOLD}${C_CYAN}=== Hardware Driver Configuration ===${RESET}"
-        echo -e "${BOLD}${C_RED}=================== EXPERIMENTAL WARNING ===================${RESET}"
-        echo -e "${C_RED}This automated driver installer is highly experimental and${RESET}"
-        echo -e "${C_RED}can be unreliable across different kernel/distro variations.${RESET}"
-        echo -e "${C_RED}It is strongly recommended to SKIP this and install your${RESET}"
-        echo -e "${C_RED}graphics drivers manually according to your distro's wiki.${RESET}"
-        echo -e "${BOLD}${C_RED}============================================================${RESET}\n"
         echo -e "Detected GPU Vendor: ${BOLD}${C_YELLOW}$GPU_VENDOR${RESET}\n"
 
         local current_driver="None"
@@ -901,17 +898,15 @@ prompt_optional_features_menu() {
         local S_NVIM=$( [ "$OPT_NVIM" = true ] && echo -e "${C_GREEN}[✓]${RESET}" || echo -e "${DIM}[ ]${RESET}" )
         local S_ZSH=$( [ "$OPT_ZSH" = true ] && echo -e "${C_GREEN}[✓]${RESET}" || echo -e "${DIM}[ ]${RESET}" )
         local S_WP=$( [ "$OPT_WALLPAPERS" = true ] && echo -e "${C_GREEN}[✓]${RESET}" || echo -e "${DIM}[ ]${RESET}" )
-        local S_KB_OVR=$( [ "$OPT_OVERRIDE_KEYBINDS" = true ] && echo -e "${C_GREEN}[✓]${RESET}" || echo -e "${DIM}[ ]${RESET}" )
         local S_STARTUPS_OVR=$( [ "$OPT_OVERRIDE_STARTUPS" = true ] && echo -e "${C_GREEN}[✓]${RESET}" || echo -e "${DIM}[ ]${RESET}" )
 
         local MENU_ITEMS="1. $S_SDDM $DM_LABEL\n"
         MENU_ITEMS+="2. $S_NVIM Neovim Matugen Configuration\n"
         MENU_ITEMS+="3. $S_ZSH Zsh Shell Setup\n"
         MENU_ITEMS+="4. $S_WP Download FULL Wallpaper Pack (Unchecked = 3 Random)\n"
-        MENU_ITEMS+="5. $S_KB_OVR Overwrite Local Keybinds with Upstream Defaults\n"
-        MENU_ITEMS+="6. $S_STARTUPS_OVR Overwrite Local Startups with Upstream Defaults\n"
-        MENU_ITEMS+="7. ${BOLD}${C_GREEN}Proceed with Installation / Update${RESET}\n"
-        MENU_ITEMS+="8. ${DIM}Back to Main Menu${RESET}"
+        MENU_ITEMS+="5. $S_STARTUPS_OVR Overwrite Local Startups with Upstream Defaults\n"
+        MENU_ITEMS+="6. ${BOLD}${C_GREEN}Proceed with Installation / Update${RESET}\n"
+        MENU_ITEMS+="7. ${DIM}Back to Main Menu${RESET}"
 
         local choice
         choice=$(echo -e "$MENU_ITEMS" | fzf \
@@ -929,9 +924,8 @@ prompt_optional_features_menu() {
             *"2."*) OPT_NVIM=$([ "$OPT_NVIM" = true ] && echo false || echo true) ;;
             *"3."*) OPT_ZSH=$([ "$OPT_ZSH" = true ] && echo false || echo true) ;;
             *"4."*) OPT_WALLPAPERS=$([ "$OPT_WALLPAPERS" = true ] && echo false || echo true) ;;
-            *"5."*) OPT_OVERRIDE_KEYBINDS=$([ "$OPT_OVERRIDE_KEYBINDS" = true ] && echo false || echo true) ;;
-            *"6."*) OPT_OVERRIDE_STARTUPS=$([ "$OPT_OVERRIDE_STARTUPS" = true ] && echo false || echo true) ;;
-            *"7."*) 
+            *"5."*) OPT_OVERRIDE_STARTUPS=$([ "$OPT_OVERRIDE_STARTUPS" = true ] && echo false || echo true) ;;
+            *"6."*) 
                 if [ "$OPT_SDDM" = true ]; then
                     if [[ -z "$CURRENT_DM" ]]; then
                         INSTALL_SDDM=true
@@ -968,7 +962,7 @@ prompt_optional_features_menu() {
                 fi
                 return 0 
                 ;;
-            *"8."*) return 1 ;;
+            *"7."*) return 1 ;;
             *) ;;
         esac
     done
@@ -1006,18 +1000,17 @@ while true; do
     MENU_ITEMS="1. $S_PKG ${C_GREEN}Manage Packages${RESET} [${#PKGS[@]} queued, Optional]\n"
     MENU_ITEMS+="2. $S_OVW ${C_CYAN}Overview & Keybinds${RESET} [Optional]\n"
     MENU_ITEMS+="3. $S_WTH ${C_YELLOW}Set Weather API Key${RESET} [${API_DISPLAY}, Optional]\n"
-    MENU_ITEMS+="4. $S_DRV ${C_RED}[ DRIVERS ] Setup${RESET} [${DRIVER_CHOICE}, Optional]\n"
-    MENU_ITEMS+="5. $S_KBD ${C_BLUE}Keyboard Layout Setup${RESET} [${KB_LAYOUTS_DISPLAY:-$KB_LAYOUTS}]\n"
-    MENU_ITEMS+="6. $S_TEL ${C_CYAN}Telemetry Settings${RESET}\n"
-    MENU_ITEMS+="7. ${BOLD}${C_MAGENTA}${INSTALL_LABEL}${RESET}\n"
-    MENU_ITEMS+="8. ${DIM}Exit${RESET}"
+    MENU_ITEMS+="4. $S_KBD ${C_BLUE}Keyboard Layout Setup${RESET} [${KB_LAYOUTS_DISPLAY:-$KB_LAYOUTS}]\n"
+    MENU_ITEMS+="5. $S_TEL ${C_CYAN}Telemetry Settings${RESET}\n"
+    MENU_ITEMS+="6. ${BOLD}${C_MAGENTA}${INSTALL_LABEL}${RESET}\n"
+    MENU_ITEMS+="7. ${DIM}Exit${RESET}"
 
     MENU_OPTION=$(echo -e "$MENU_ITEMS" | fzf \
         --ansi \
         --layout=reverse \
         --border=rounded \
         --margin=1,2 \
-        --height=17 \
+        --height=16 \
         --prompt=" Main Menu > " \
         --pointer=">" \
         --header=" Navigate with ARROWS. Select with ENTER. ")
@@ -1026,10 +1019,9 @@ while true; do
         *"1."*) manage_packages ;;
         *"2."*) show_overview ;;
         *"3."*) set_weather_api ;;
-        *"4."*) manage_drivers ;;
-        *"5."*) manage_keyboard ;;
-        *"6."*) manage_telemetry ;;
-        *"7."*) 
+        *"4."*) manage_keyboard ;;
+        *"5."*) manage_telemetry ;;
+        *"6."*) 
             if [ "$VISITED_KEYBOARD" = false ]; then
                 echo -e "\n${C_RED}[!] You must configure your Keyboard Layouts in the submenu before starting.${RESET}"
                 sleep 2.5
@@ -1041,7 +1033,7 @@ while true; do
                 continue
             fi
             ;;
-        *"8."*) clear; exit 0 ;;
+        *"7."*) clear; exit 0 ;;
         *) exit 0 ;;
     esac
 done
@@ -1319,7 +1311,7 @@ jq -n --slurpfile local "$OLD_JSON" --slurpfile up "$UPSTREAM_JSON" \
    --arg langs "$KB_LAYOUTS" \
    --arg wpdir "$WALLPAPER_DIR" \
    --arg kbopt "$KB_OPTIONS" \
-   --arg ovr_kb "$OPT_OVERRIDE_KEYBINDS" \
+   --arg ovr_kb "false" \
    --arg ovr_su "$OPT_OVERRIDE_STARTUPS" '
    
    $up[0] as $u |
