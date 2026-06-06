@@ -104,7 +104,6 @@ OPT_SDDM=false
 OPT_NVIM=false
 OPT_ZSH=false
 OPT_WALLPAPERS=false
-OPT_OVERRIDE_STARTUPS=false
 
 INSTALL_NVIM=false
 INSTALL_ZSH=false
@@ -671,8 +670,7 @@ manage_keyboard() {
 show_overview() {
     draw_header
     echo -e "${BOLD}${C_MAGENTA}=== System Overview & Keybinds ===${RESET}\n"
-    echo -e "This configuration is an adaptation of the ${BOLD}${C_CYAN}ilyamiro/nixos-configuration${RESET} setup."
-    echo -e "Here are the core keybindings to navigate your new system once installed:\n"
+    echo -e "Here are the keybindings for this setup:\n"
 
     print_kb() {
         printf "  ${C_CYAN}[${RESET} ${BOLD}%-17s${RESET} ${C_CYAN}]${RESET}  ${C_YELLOW}➜${RESET}  %s\n" "$1" "$2"
@@ -680,35 +678,39 @@ show_overview() {
 
     echo -e "${BOLD}${C_BLUE}--- Applications ---${RESET}"
     print_kb "SUPER + RETURN" "Open Terminal (kitty)"
-    print_kb "SUPER + D" "Open App Launcher (rofi)"
-    print_kb "SUPER + F" "Open Browser (Firefox)"
-    print_kb "SUPER + E" "Open File Manager (nautilus)"
-    print_kb "SUPER + C" "Clipboard History (rofi)"
+    print_kb "SUPER + A" "App Launcher (rofi)"
+    print_kb "SUPER + B" "Web Browser (xdg-open)"
+    print_kb "SUPER + E" "File Manager (nautilus)"
+    print_kb "SUPER + F" "Firefox"
+    print_kb "SUPER + Q" "Close Window"
     echo ""
 
     echo -e "${BOLD}${C_BLUE}--- Quickshell Widgets ---${RESET}"
     print_kb "SUPER + M" "Toggle Monitors"
-    print_kb "SUPER + Q" "Toggle Music"
-    print_kb "SUPER + B" "Toggle Battery"
     print_kb "SUPER + W" "Toggle Wallpaper"
     print_kb "SUPER + S" "Toggle Calendar"
     print_kb "SUPER + N" "Toggle Network"
-    print_kb "SUPER + SHIFT + T" "Toggle FocusTime"
     print_kb "SUPER + V" "Toggle Volume Control"
+    print_kb "SUPER + C" "Toggle Clipboard"
+    print_kb "SUPER + H" "Toggle Guide"
+    print_kb "SUPER + SHIFT + T" "Toggle FocusTime"
     echo ""
 
     echo -e "${BOLD}${C_BLUE}--- Window Management ---${RESET}"
-    print_kb "ALT + F4" "Close Active Window / Widget"
-    print_kb "SUPER + SHIFT + F" "Toggle Floating"
+    print_kb "SUPER + Q" "Close Window"
+    print_kb "ALT + F4" "Close Window"
+    print_kb "SUPER + SHIFT + F" "Fullscreen"
     print_kb "SUPER + Arrows" "Move Focus"
     print_kb "SUPER + CTRL + Arr" "Move Window"
+    print_kb "SUPER + SHIFT + Arr" "Resize Window"
     echo ""
 
     echo -e "${BOLD}${C_BLUE}--- System Controls ---${RESET}"
     print_kb "SUPER + L" "Lock Screen"
     print_kb "Print Screen" "Screenshot"
     print_kb "SHIFT + Print" "Screenshot (Edit)"
-    print_kb "ALT + SHIFT" "Switch Keyboard Layout"
+    print_kb "SUPER + Print" "Screenshot Full"
+    print_kb "SUPER + SPACE" "Play/Pause Media"
     echo ""
 
     echo -e "${BOLD}${C_GREEN}Press ENTER to return to the Main Menu...${RESET}"
@@ -898,15 +900,13 @@ prompt_optional_features_menu() {
         local S_NVIM=$( [ "$OPT_NVIM" = true ] && echo -e "${C_GREEN}[✓]${RESET}" || echo -e "${DIM}[ ]${RESET}" )
         local S_ZSH=$( [ "$OPT_ZSH" = true ] && echo -e "${C_GREEN}[✓]${RESET}" || echo -e "${DIM}[ ]${RESET}" )
         local S_WP=$( [ "$OPT_WALLPAPERS" = true ] && echo -e "${C_GREEN}[✓]${RESET}" || echo -e "${DIM}[ ]${RESET}" )
-        local S_STARTUPS_OVR=$( [ "$OPT_OVERRIDE_STARTUPS" = true ] && echo -e "${C_GREEN}[✓]${RESET}" || echo -e "${DIM}[ ]${RESET}" )
 
         local MENU_ITEMS="1. $S_SDDM $DM_LABEL\n"
         MENU_ITEMS+="2. $S_NVIM Neovim Matugen Configuration\n"
         MENU_ITEMS+="3. $S_ZSH Zsh Shell Setup\n"
         MENU_ITEMS+="4. $S_WP Download FULL Wallpaper Pack (Unchecked = 3 Random)\n"
-        MENU_ITEMS+="5. $S_STARTUPS_OVR Overwrite Local Startups with Upstream Defaults\n"
-        MENU_ITEMS+="6. ${BOLD}${C_GREEN}Proceed with Installation / Update${RESET}\n"
-        MENU_ITEMS+="7. ${DIM}Back to Main Menu${RESET}"
+        MENU_ITEMS+="5. ${BOLD}${C_GREEN}Proceed with Installation / Update${RESET}\n"
+        MENU_ITEMS+="6. ${DIM}Back to Main Menu${RESET}"
 
         local choice
         choice=$(echo -e "$MENU_ITEMS" | fzf \
@@ -924,8 +924,7 @@ prompt_optional_features_menu() {
             *"2."*) OPT_NVIM=$([ "$OPT_NVIM" = true ] && echo false || echo true) ;;
             *"3."*) OPT_ZSH=$([ "$OPT_ZSH" = true ] && echo false || echo true) ;;
             *"4."*) OPT_WALLPAPERS=$([ "$OPT_WALLPAPERS" = true ] && echo false || echo true) ;;
-            *"5."*) OPT_OVERRIDE_STARTUPS=$([ "$OPT_OVERRIDE_STARTUPS" = true ] && echo false || echo true) ;;
-            *"6."*) 
+            *"5."*) 
                 if [ "$OPT_SDDM" = true ]; then
                     if [[ -z "$CURRENT_DM" ]]; then
                         INSTALL_SDDM=true
@@ -962,7 +961,7 @@ prompt_optional_features_menu() {
                 fi
                 return 0 
                 ;;
-            *"7."*) return 1 ;;
+            *"6."*) return 1 ;;
             *) ;;
         esac
     done
