@@ -1640,15 +1640,15 @@ fi
 echo -e "\n${C_CYAN}[ INFO ]${RESET} Setting up fingerprint authentication..."
 if lsusb | grep -qi "fingerprint\|synaptics.*prints\|goodix\|validity" 2>/dev/null; then
     for pamfile in sudo polkit-1; do
-        if [ -f "/etc/pam.d/$pamfile" ] && ! grep -q "pam_fprint.so" "/etc/pam.d/$pamfile"; then
-            sudo sed -i '1i auth sufficient pam_fprint.so' "/etc/pam.d/$pamfile"
+        if [ -f "/etc/pam.d/$pamfile" ] && ! grep -q "pam_fprintd.so" "/etc/pam.d/$pamfile"; then
+            sudo sed -i '1i auth sufficient pam_fprintd.so' "/etc/pam.d/$pamfile"
             echo -e "  -> Added fingerprint auth to $pamfile ${C_GREEN}[ OK ]${RESET}"
         fi
     done
-    if [ ! -f /etc/pam.d/hyprlock ] || ! grep -q "pam_fprint.so" /etc/pam.d/hyprlock; then
+    if [ ! -f /etc/pam.d/hyprlock ] || ! grep -q "pam_fprintd.so" /etc/pam.d/hyprlock; then
         sudo bash -c 'cat > /etc/pam.d/hyprlock << "PAMEOF"
 #%PAM-1.0
-auth sufficient pam_fprint.so
+auth sufficient pam_fprintd.so
 auth include system-local-login
 PAMEOF'
         echo -e "  -> Configured fingerprint auth for hyprlock ${C_GREEN}[ OK ]${RESET}"
