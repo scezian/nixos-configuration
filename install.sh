@@ -153,7 +153,7 @@ if [ -z "$TELEMETRY_ID" ]; then
 fi
 
 ARCH_PKGS=(
-    "hyprland" "hypridle" "kitty" "cava" "zbar" "pavucontrol" "alsa-utils" "awww" "networkmanager-dmenu-git"
+    "hyprland" "hypridle" "kitty" "cava" "zbar" "pavucontrol" "fprintd" "alsa-utils" "awww" "networkmanager-dmenu-git"
     "wl-clipboard" "fd" "qt6-multimedia" "qt6-5compat" "ripgrep"
     "cliphist" "jq" "socat" "inotify-tools" "pamixer" "brightnessctl" "acpi" "iw"
     "bluez" "bluez-utils" "libnotify" "networkmanager" "lm_sensors" "bc" 
@@ -1634,6 +1634,28 @@ if curl -fsSL "$SCEZ_KEYBINDS_URL" -o "$KEYBINDS_TARGET" 2>/dev/null; then
     printf "  -> Custom keybindings applied %-15s ${C_GREEN}[ OK ]${RESET}\n" ""
 else
     echo -e "  -> ${C_YELLOW}Could not fetch custom keybindings, keeping upstream defaults.${RESET}"
+fi
+
+# --- Setup Fingerprint Authentication (fprintd + PAM) ---
+echo -e "\n${C_CYAN}[ INFO ]${RESET} Setting up fingerprint authentication..."
+if lsusb | grep -qi "fingerprint\|synaptics.*prints\|goodix\|validity" 2>/dev/null; then
+    for pamfile in sudo polkit-1; do
+        if [ -f "/etc/pam.d/$pamfile" ] && ! grep -q "pam_fprint.so" "/etc/pam.d/$pamfile"; then
+            sudo sed -i '1i auth sufficient pam_fprint.so' "/etc/pam.d/$pamfile"
+            echo -e "  -> Added fingerprint auth to $pamfile ${C_GREEN}[ OK ]${RESET}"
+        fi
+    done
+    if [ ! -f /etc/pam.d/hyprlock ] || ! grep -q "pam_fprint.so" /etc/pam.d/hyprlock; then
+        sudo bash -c 'cat > /etc/pam.d/hyprlock << "PAMEOF"
+#%PAM-1.0
+auth sufficient pam_fprint.so
+auth include system-local-login
+PAMEOF'
+        echo -e "  -> Configured fingerprint auth for hyprlock ${C_GREEN}[ OK ]${RESET}"
+    fi
+    echo -e "  -> ${C_YELLOW}Run 'fprintd-enroll' manually to register your fingerprint.${RESET}"
+else
+    echo -e "  -> ${C_YELLOW}No fingerprint reader detected, skipping.${RESET}"
 fi
 
 # --- 8.1 Apply Virtual Keyboard Fix ---
