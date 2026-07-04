@@ -1653,7 +1653,12 @@ auth include system-local-login
 PAMEOF'
         echo -e "  -> Configured fingerprint auth for hyprlock ${C_GREEN}[ OK ]${RESET}"
     fi
-    echo -e "  -> ${C_YELLOW}Run 'fprintd-enroll' manually to register your fingerprint.${RESET}"
+    read -p "Would you like to enroll your fingerprint now? [Y/n] " enroll_choice
+    if [[ "$enroll_choice" =~ ^[Yy]$ || -z "$enroll_choice" ]]; then
+        fprintd-enroll
+    else
+        echo -e "  -> ${C_YELLOW}Skipped. Run 'fprintd-enroll' manually later.${RESET}"
+    fi
 else
     echo -e "  -> ${C_YELLOW}No fingerprint reader detected, skipping.${RESET}"
 fi
