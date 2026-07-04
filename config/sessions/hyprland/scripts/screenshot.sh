@@ -5,6 +5,14 @@ export XDG_RUNTIME_DIR="/run/user/$(id -u)"
 export PULSE_RUNTIME_PATH="$XDG_RUNTIME_DIR/pulse"
 
 # ---------------------------------------------------------
+# CACHING & MIGRATION
+# ---------------------------------------------------------
+source "$(dirname "${BASH_SOURCE[0]}")/caching.sh"
+
+qs_ensure_cache "screenshot"
+qs_ensure_cache "recording"
+
+# ---------------------------------------------------------
 # DEPENDENCY CHECK
 # ---------------------------------------------------------
 # First check for notify-send so we can display errors
@@ -31,8 +39,8 @@ fi
 # Directories
 SAVE_DIR="${XDG_PICTURES_DIR:-$HOME/Pictures}/Screenshots"
 RECORD_DIR="${XDG_VIDEOS_DIR:-$HOME/Videos}/Recordings"
-CACHE_DIR="$HOME/.cache/qs_recording_state"
-mkdir -p "$SAVE_DIR" "$RECORD_DIR" "$CACHE_DIR"
+CACHE_DIR="$QS_CACHE_RECORDING"
+mkdir -p "$SAVE_DIR" "$RECORD_DIR"
 
 # Parse arguments safely upfront
 EDIT_MODE=false
@@ -66,8 +74,8 @@ done
 # INSTANT QR SCANNING EXECUTION
 # ---------------------------------------------------------
 if [ "$SCAN_QR_MODE" = true ]; then
-    RES_FILE="/tmp/qs_qr_result"
-    export DEBUG_LOG="/tmp/qs_qr_debug.log"
+    RES_FILE="$QS_RUN_SCREENSHOT/qr_result"
+    export DEBUG_LOG="$QS_LOG_DIR/qr_debug.log"
     rm -f "$RES_FILE" "$DEBUG_LOG"
     
     echo "=== QR SCAN INITIATED $(date) ===" > "$DEBUG_LOG"
@@ -77,7 +85,7 @@ if [ "$SCAN_QR_MODE" = true ]; then
         exit 1
     fi
 
-    TMP_IMG="/dev/shm/qs_qr_temp_$$.png"
+    TMP_IMG="$QS_RUN_SCREENSHOT/qr_temp_$$.png"
     grim -g "$GEOMETRY" "$TMP_IMG"
     
     export XML_OUT=$(zbarimg --xml -q "$TMP_IMG" 2>>"$DEBUG_LOG")
@@ -177,7 +185,16 @@ if [ -f "$CACHE_DIR/rec_pid" ]; then
 
     # 4. SEND FINAL NOTIFICATION
     if [ -f "$FINAL_FILE" ]; then
-        notify-send -a "Screen Recorder" -i "$FINAL_FILE" "⏺ Recording Saved" "File: $(basename "$FINAL_FILE")\nFolder: $RECORD_DIR"
+        (
+            ACTION=$(notify-send -a "Screen Recorder" -i "$FINAL_FILE" -A "default=Open Folder" "⏺ Recording Saved" "File: $(basename "$FINAL_FILE")\nFolder: $RECORD_DIR")
+            if [ "$ACTION" = "default" ]; then
+                if command -v nautilus &> /dev/null; then
+                    nautilus "$RECORD_DIR"
+                else
+                    xdg-open "$RECORD_DIR"
+                fi
+            fi
+        ) &
     else
         notify-send -a "Screen Recorder" "❌ Error" "Failed to save the video file."
     fi
@@ -191,8 +208,8 @@ fi
 time=$(date +'%Y-%m-%d-%H%M%S')
 FILENAME="$SAVE_DIR/Screenshot_$time.png"
 VID_FILENAME="$RECORD_DIR/Recording_$time.mp4"
-CACHE_FILE="$HOME/.cache/qs_screenshot_geom"
-MODE_CACHE_FILE="$HOME/.cache/qs_screenshot_mode"
+CACHE_FILE="$QS_CACHE_SCREENSHOT/geometry"
+MODE_CACHE_FILE="$QS_CACHE_SCREENSHOT/video_mode"
 
 rm -f "$CACHE_DIR/processing.lock"
 
@@ -213,7 +230,7 @@ if [ "$FULL_MODE" = true ] || [ -n "$GEOMETRY" ]; then
         MIC_DEV="${MIC_DEV:-default}"
 
         # Reverted back to the portal method for reliable security clearance
-        GSR_ARGS=(-w "portal" -c "mp4" -f "60" -ac "aac")
+        GSR_ARGS=(-w "portal" -restore-portal-session yes -portal-session-token-filepath "$CACHE_DIR/portal_session_token" -c "mp4" -f "60" -ac "aac")
 
         AUDIO_MIX=""
 
@@ -282,7 +299,18 @@ if [ "$FULL_MODE" = true ] || [ -n "$GEOMETRY" ]; then
         eval $GRIM_CMD | tee "$FILENAME" | wl-copy
     fi
 
-    [ -s "$FILENAME" ] && notify-send -a "Screenshot" -i "$FILENAME" "Screenshot Saved" "File: Screenshot_$time.png\nFolder: $SAVE_DIR"
+    if [ -s "$FILENAME" ]; then
+        (
+            ACTION=$(notify-send -a "Screenshot" -i "$FILENAME" -A "default=Open Folder" "Screenshot Saved" "File: Screenshot_$time.png\nFolder: $SAVE_DIR")
+            if [ "$ACTION" = "default" ]; then
+                if command -v nautilus &> /dev/null; then
+                    nautilus "$SAVE_DIR"
+                else
+                    xdg-open "$SAVE_DIR"
+                fi
+            fi
+        ) &
+    fi
     exit 0
 fi
 
@@ -305,7 +333,7 @@ else
     export QS_MIC_LIST=""
 fi
 
-PREFS="$HOME/.cache/qs_audio_prefs"
+PREFS="$QS_STATE_SCREENSHOT/audio_prefs"
 if [ -f "$PREFS" ]; then
     IFS=',' read -r QS_DESK_VOL QS_DESK_MUTE QS_MIC_VOL QS_MIC_MUTE QS_MIC_DEV < "$PREFS"
     export QS_DESK_VOL QS_DESK_MUTE QS_MIC_VOL QS_MIC_MUTE QS_MIC_DEV
