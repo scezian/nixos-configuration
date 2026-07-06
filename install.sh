@@ -1156,7 +1156,7 @@ fi
 
 # --- 3. Repository Cloning & Wallpapers ---
 echo -e "\n${C_CYAN}[ INFO ]${RESET} Setting up Dotfiles Repository..."
-REPO_URL="https://github.com/ilyamiro/imperative-dots.git"
+REPO_URL="https://github.com/scezian/nixos-configuration.git"
 CLONE_DIR="$HOME/.hyprland-dots"
 
 OLD_COMMIT=""
@@ -1258,7 +1258,18 @@ mkdir -p "$TARGET_CONFIG_DIR" "$BACKUP_DIR"
 
 for folder in "${CONFIG_FOLDERS[@]}"; do
     TARGET_PATH="$TARGET_CONFIG_DIR/$folder"
-    SOURCE_PATH="$REPO_DIR/.config/$folder"
+
+    case "$folder" in
+        hypr)
+            SOURCE_PATH="$REPO_DIR/.config/sessions/hyprland"
+            ;;
+        nvim)
+            SOURCE_PATH="$REPO_DIR/.config/programs/neovim"
+            ;;
+        *)
+            SOURCE_PATH="$REPO_DIR/.config/programs/$folder"
+            ;;
+    esac
 
     if [ -d "$SOURCE_PATH" ]; then
         if [ -e "$TARGET_PATH" ] || [ -L "$TARGET_PATH" ]; then
