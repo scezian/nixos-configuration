@@ -1642,7 +1642,7 @@ pkill -f "settings_watcher.sh --compile" 2>/dev/null || true
 
 # --- Apply custom keybindings AFTER compile (compile would overwrite if done before) ---
 echo -e "\n${C_CYAN}[ INFO ]${RESET} Applying custom keybindings..."
-SCEZ_KEYBINDS_URL="https://raw.githubusercontent.com/scezian/nixos-configuration/master/config/sessions/hyprland/config/keybindings.conf"
+SCEZ_KEYBINDS_URL="https://raw.githubusercontent.com/scezian/nixos-configuration/master/.config/sessions/hyprland/config/keybindings.conf"
 KEYBINDS_TARGET="$TARGET_CONFIG_DIR/hypr/config/keybindings.conf"
 
 if curl -fsSL "$SCEZ_KEYBINDS_URL" -o "$KEYBINDS_TARGET" 2>/dev/null; then
