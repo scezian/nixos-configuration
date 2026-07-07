@@ -1634,7 +1634,11 @@ fi
 # Trigger Template Compilation
 echo -e "\n${C_CYAN}[ INFO ]${RESET} Compiling .conf files from Templates..."
 chmod +x "$TARGET_CONFIG_DIR/hypr/scripts/settings_watcher.sh"
-bash "$TARGET_CONFIG_DIR/hypr/scripts/settings_watcher.sh" --compile
+timeout 30 bash "$TARGET_CONFIG_DIR/hypr/scripts/settings_watcher.sh" --compile
+if [ $? -eq 124 ]; then
+    echo -e "  -> ${C_CYAN}[ INFO ]${RESET} settings_watcher.sh entered watch mode after compiling; stopped it so install can continue."
+fi
+pkill -f "settings_watcher.sh --compile" 2>/dev/null || true
 
 # --- Apply custom keybindings AFTER compile (compile would overwrite if done before) ---
 echo -e "\n${C_CYAN}[ INFO ]${RESET} Applying custom keybindings..."
