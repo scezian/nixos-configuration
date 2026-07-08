@@ -39,6 +39,7 @@ if ! [[ "$SEQ_END" =~ ^[0-9]+$ ]]; then
 fi
 
 print_workspaces() {
+    mkdir -p "$XDG_RUNTIME_DIR/quickshell/workspaces"
     # Get raw data with a timeout fallback
     spaces=$(timeout 2 hyprctl workspaces -j 2>/dev/null)
     active=$(timeout 2 hyprctl activeworkspace -j 2>/dev/null | jq '.id')
@@ -68,9 +69,9 @@ print_workspaces() {
                 tooltip: $win
             }
         )
-    ' > /tmp/qs_workspaces.tmp
+    ' > $XDG_RUNTIME_DIR/quickshell/workspaces/workspaces.tmp
     
-    mv /tmp/qs_workspaces.tmp /tmp/qs_workspaces.json
+    mv $XDG_RUNTIME_DIR/quickshell/workspaces/workspaces.tmp $XDG_RUNTIME_DIR/quickshell/workspaces/workspaces.json
 }
 
 # Print initial state

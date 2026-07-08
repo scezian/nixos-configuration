@@ -294,7 +294,7 @@ Variants {
 
             Process {
                 id: wsDaemon
-                command: ["bash", "-c", "~/.config/hypr/scripts/workspaces.sh"]
+                command: ["bash", "-c", "~/.config/hypr/scripts/quickshell/workspaces.sh"]
                 running: true
             }
 
