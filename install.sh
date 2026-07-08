@@ -1494,6 +1494,16 @@ systemctl --user enable easyeffects.service 2>/dev/null || true
 printf "  -> EasyEffects daemon service enabled %-12s ${C_GREEN}[ OK ]${RESET}\n" ""
 
 if [ "$INSTALL_ZSH" = true ] && command -v zsh &> /dev/null; then
+    if [ ! -d "$HOME/.oh-my-zsh" ]; then
+        sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+        printf "  -> oh-my-zsh installed %-19s ${C_GREEN}[ OK ]${RESET}\n" ""
+    fi
+    if [ ! -d "$HOME/.oh-my-zsh/custom/themes/powerlevel10k" ]; then
+        git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$HOME/.oh-my-zsh/custom/themes/powerlevel10k"
+        printf "  -> Powerlevel10k cloned %-18s ${C_GREEN}[ OK ]${RESET}\n" ""
+    fi
+    sudo pacman -S --needed --noconfirm zsh-autosuggestions zsh-syntax-highlighting
+    printf "  -> zsh plugin packages installed %-9s ${C_GREEN}[ OK ]${RESET}\n" ""
     if [ -f "$HOME/.zshrc" ]; then
         echo -e "  -> Extracting existing aliases from ~/.zshrc..."
         mkdir -p "$TARGET_CONFIG_DIR/zsh"
@@ -1506,6 +1516,7 @@ if [ "$INSTALL_ZSH" = true ] && command -v zsh &> /dev/null; then
     fi
 
     cp "$TARGET_CONFIG_DIR/zsh/.zshrc" "$HOME/.zshrc"
+    cp "$TARGET_CONFIG_DIR/zsh/.p10k.zsh" "$HOME/.p10k.zsh"
     chsh -s $(which zsh) "$USER"
 
     if [ -f "$TARGET_CONFIG_DIR/zsh/user_aliases.zsh" ]; then
