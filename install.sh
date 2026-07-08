@@ -1399,8 +1399,8 @@ if [ -f "$WP_QML" ]; then
     sed -i 's/matugen image "[^"]*"/& --source-color-index 0/g' "$WP_QML"
 fi
 
-if [ -d "$TARGET_CONFIG_DIR/hypr/scripts" ]; then
-    find "$TARGET_CONFIG_DIR/hypr/scripts" -type f -exec sed -i -e 's/swww-daemon/awww-daemon/g' -e 's/swww/awww/g' {} +
+if [ -d "$TARGET_CONFIG_DIR/hypr" ]; then
+    find "$TARGET_CONFIG_DIR/hypr" -type f -exec sed -i -e 's/swww-daemon/awww-daemon/g' -e 's/swww/awww/g' {} +
 fi
 
 # 6. Zsh Dynamism
