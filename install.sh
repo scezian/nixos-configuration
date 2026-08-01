@@ -1048,6 +1048,10 @@ send_telemetry "full"
 
 echo -e "${C_CYAN}[ INFO ]${RESET} Requesting sudo privileges for installation..."
 sudo -v
+# Keep sudo credential alive during long AUR builds (prevents silent install
+# failures like quickshell-git when the cached sudo timestamp expires mid-loop)
+while true; do sudo -n true; sleep 60; kill -0 "$$" 2>/dev/null || exit; done 2>/dev/null &
+SUDO_KEEPALIVE_PID=$!
 
 # --- 0. Resolve Package Conflicts ---
 echo -e "\n${C_CYAN}[ INFO ]${RESET} Resolving potential package conflicts..."
@@ -1105,10 +1109,20 @@ else
         [[ $SAFE_JOBS -lt 1 ]] && SAFE_JOBS=1
         [[ $SAFE_JOBS -gt 4 ]] && SAFE_JOBS=4
 
-        if yes "Y" | env CARGO_BUILD_JOBS="$SAFE_JOBS" MAKEFLAGS="-j$SAFE_JOBS" $PKG_MANAGER "$pkg"; then
+        PKG_INSTALL_OK=false
+        for attempt in 1 2 3; do
+            if yes "Y" | env CARGO_BUILD_JOBS="$SAFE_JOBS" MAKEFLAGS="-j$SAFE_JOBS" $PKG_MANAGER "$pkg"; then
+                PKG_INSTALL_OK=true
+                break
+            else
+                echo -e "\n${C_YELLOW}[ RETRY $attempt/3 ] Failed to install ${pkg}, retrying...${RESET}"
+                sleep 3
+            fi
+        done
+        if [ "$PKG_INSTALL_OK" = true ]; then
             echo -e "\n${C_GREEN}[ OK ] Successfully installed ${pkg}${RESET}"
         else
-            echo -e "\n${C_RED}[ FAILED ] Failed to install ${pkg}${RESET}"
+            echo -e "\n${C_RED}[ FAILED ] Failed to install ${pkg} after 3 attempts${RESET}"
             FAILED_PKGS+=("$pkg")
         fi
         sleep 0.5
@@ -1761,6 +1775,8 @@ if [ ${#FAILED_PKGS[@]} -ne 0 ]; then
 fi
 
 echo -e "Old configurations backed up to: ${C_CYAN}$BACKUP_DIR${RESET}"
+kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true
+
 echo -e "Please log out and log back in, or restart Hyprland to apply all changes."
 
 send_telemetry "done"
