@@ -15,15 +15,15 @@ output_path = "~/.config/vesktop/themes/matugen.theme.css"
 
 [templates.firefox]
 input_path = "~/.config/matugen/templates/firefox.css"
-output_path = "~/.mozilla/firefox/zawmoi9h.default/chrome/matugen.css"
+output_path = "~/.local/state/matugen/firefox-profile/chrome/matugen.css"
 
 [templates.web_github]
 input_path = "~/.config/matugen/templates/websites/github.css.template"
-output_path = "~/.mozilla/firefox/zawmoi9h.default/chrome/matugen-github.css"
+output_path = "~/.local/state/matugen/firefox-profile/chrome/matugen-github.css"
 
 [templates.web_youtube]
 input_path = "~/.config/matugen/templates/websites/youtube.css.template"
-output_path = "~/.mozilla/firefox/zawmoi9h.default/chrome/matugen-youtube.css"
+output_path = "~/.local/state/matugen/firefox-profile/chrome/matugen-youtube.css"
 
 [templates.neovim]
 input_path = "~/.config/matugen/templates/nvim-colors.lua.template"
@@ -66,7 +66,7 @@ input_path = "~/.config/matugen/templates/qt-style.qss.template"
 output_path = "~/.config/qt6ct/qss/matugen-style.qss"
 
 [templates.hyprland]
-input_path = '~/.config/matugen/templates/hyprland.conf.template'
-output_path = '~/.config/hypr/colors.conf'
+input_path = '~/.config/matugen/templates/hyprland.lua.template'
+output_path = '~/.config/hypr/colors.lua'
 
 
