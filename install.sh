@@ -1659,6 +1659,7 @@ fi
 # Trigger Template Compilation
 echo -e "\n${C_CYAN}[ INFO ]${RESET} Compiling .conf files from Templates..."
 chmod +x "$TARGET_CONFIG_DIR/hypr/scripts/settings_watcher.sh"
+chmod +x "$TARGET_CONFIG_DIR/hypr/scripts/firefox_profile_link.sh"
 timeout 30 bash "$TARGET_CONFIG_DIR/hypr/scripts/settings_watcher.sh" --compile
 if [ $? -eq 124 ]; then
     echo -e "  -> ${C_CYAN}[ INFO ]${RESET} settings_watcher.sh entered watch mode after compiling; stopped it so install can continue."
@@ -1667,8 +1668,8 @@ pkill -f "settings_watcher.sh --compile" 2>/dev/null || true
 
 # --- Apply custom keybindings AFTER compile (compile would overwrite if done before) ---
 echo -e "\n${C_CYAN}[ INFO ]${RESET} Applying custom keybindings..."
-SCEZ_KEYBINDS_URL="https://raw.githubusercontent.com/scezian/nixos-configuration/master/.config/sessions/hyprland/config/keybindings.conf"
-KEYBINDS_TARGET="$TARGET_CONFIG_DIR/hypr/config/keybindings.conf"
+SCEZ_KEYBINDS_URL="https://raw.githubusercontent.com/scezian/nixos-configuration/master/.config/sessions/hyprland/config/keybindings.lua"
+KEYBINDS_TARGET="$TARGET_CONFIG_DIR/hypr/config/keybindings.lua"
 
 if curl -fsSL "$SCEZ_KEYBINDS_URL" -o "$KEYBINDS_TARGET" 2>/dev/null; then
     printf "  -> Custom keybindings applied %-15s ${C_GREEN}[ OK ]${RESET}\n" ""
