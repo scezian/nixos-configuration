@@ -1421,10 +1421,23 @@ Variants {
                                     Behavior on opacity { NumberAnimation { duration: 300 } }
                                     gradient: Gradient {
                                         orientation: Gradient.Horizontal
-                                        GradientStop { position: 0.0; color: barWindow.isDesktop ? mocha.red : barWindow.batDynamicColor; Behavior on color { ColorAnimation { duration: 300 } } }
-                                        GradientStop { position: 1.0; color: barWindow.isDesktop ? Qt.lighter(mocha.red, 1.3) : Qt.lighter(barWindow.batDynamicColor, 1.3); Behavior on color { ColorAnimation { duration: 300 } } }
+                                        GradientStop { id: gradStop0; position: 0.0; color: barWindow.isDesktop ? mocha.red : barWindow.batDynamicColor; Behavior on color { ColorAnimation { duration: 300 } } }
+                                        GradientStop { id: gradStop1; position: 1.0; color: barWindow.isDesktop ? Qt.lighter(mocha.red, 1.3) : Qt.lighter(barWindow.batDynamicColor, 1.3); Behavior on color { ColorAnimation { duration: 300 } } }
+                                    }
+                                SequentialAnimation {
+                                    running: !barWindow.isDesktop && barWindow.batStatus === "Charging"
+                                    loops: Animation.Infinite
+                                    ParallelAnimation {
+                                        ColorAnimation { target: gradStop0; property: "color"; to: Qt.lighter(mocha.green, 1.5); duration: 500; easing.type: Easing.InOutSine }
+                                        ColorAnimation { target: gradStop1; property: "color"; to: Qt.darker(mocha.green, 1.4); duration: 500; easing.type: Easing.InOutSine }
+                                    }
+                                    ParallelAnimation {
+                                        ColorAnimation { target: gradStop0; property: "color"; to: Qt.darker(mocha.green, 1.4); duration: 500; easing.type: Easing.InOutSine }
+                                        ColorAnimation { target: gradStop1; property: "color"; to: Qt.lighter(mocha.green, 1.5); duration: 500; easing.type: Easing.InOutSine }
                                     }
                                 }
+                                }
+                                
                                 
                                 property real targetWidth: barWindow.isDesktop ? barWindow.s(34) : batLayoutRow.implicitWidth + barWindow.s(24)
                                 width: targetWidth
@@ -1444,12 +1457,20 @@ Variants {
                                     id: batLayoutRow
                                     anchors.centerIn: parent
                                     spacing: barWindow.s(8)
-                                    Text { 
+                                    Text {
+                                        id: batIconText
                                         anchors.verticalCenter: parent.verticalCenter
-                                        text: barWindow.isDesktop ? "" : barWindow.batIcon; 
-                                        font.family: "Iosevka Nerd Font"; font.pixelSize: barWindow.isDesktop ? barWindow.s(18) : barWindow.s(16); 
-                                        color: mocha.base 
+                                        text: barWindow.isDesktop ? "" : barWindow.batIcon
+                                        font.family: "Iosevka Nerd Font"; font.pixelSize: barWindow.isDesktop ? barWindow.s(18) : barWindow.s(16)
+                                        color: mocha.base
                                         Behavior on color { ColorAnimation { duration: 300 } }
+                                        transformOrigin: Item.Center
+                                        SequentialAnimation {
+                                            running: !barWindow.isDesktop && barWindow.batStatus === "Charging"
+                                            loops: Animation.Infinite
+                                            NumberAnimation { target: batIconText; property: "scale"; to: 1.25; duration: 700; easing.type: Easing.InOutSine }
+                                            NumberAnimation { target: batIconText; property: "scale"; to: 1.0; duration: 700; easing.type: Easing.InOutSine }
+                                        }
                                     }
                                     Text { 
                                         anchors.verticalCenter: parent.verticalCenter
