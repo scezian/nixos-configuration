@@ -35,6 +35,7 @@ PanelWindow {
 
     WlrLayershell.namespace: "qs-master"
     WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
     
     exclusionMode: ExclusionMode.Ignore 
     focusable: true
