@@ -116,6 +116,19 @@ PanelWindow {
                 property int typeLenSum: 0
                 property int typeLenBody: 0
 
+                property bool isBattery: (model.appName === "Battery")
+                property color battAccent: {
+                    if (!isBattery) return _theme.mauve;
+                    if (fullSummary === "Charging") return _theme.green;
+                    if (fullSummary === "Fully charged") return _theme.yellow;
+                    return _theme.overlay2;
+                }
+                property string battGlyph: {
+                    if (fullSummary === "Charging") return "";
+                    if (fullSummary === "Fully charged") return "";
+                    return "";
+                }
+
                 ParallelAnimation {
                     running: true
                     NumberAnimation { 
@@ -141,8 +154,8 @@ PanelWindow {
                     radius: popupWindow.layoutConfig.radius
                     
                     color: _theme.base
-                    border.color: _theme.surface1
-                    border.width: 1
+                    border.color: delegateRoot.isBattery ? delegateRoot.battAccent : _theme.surface1
+                    border.width: delegateRoot.isBattery ? 2 : 1
                     clip: true 
                     
                     property color blob1Color: contentWrapper.blobPalette1[index % 5]
@@ -204,12 +217,26 @@ PanelWindow {
                             Behavior on opacity { NumberAnimation { duration: 250 } }
                         }
                     }
+                    Text {
+                        id: battIconBadge
+                        visible: delegateRoot.isBattery && delegateRoot.battGlyph !== ""
+                        text: delegateRoot.battGlyph
+                        color: delegateRoot.battAccent
+                        font.family: "Iosevka Nerd Font"
+                        font.pixelSize: 22 * popupWindow.uiScale
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.margins: popupWindow.layoutConfig.padding
+                    }
+
                     ColumnLayout {
                         id: contentCol
                         anchors.left: parent.left
+                        anchors.leftMargin: (delegateRoot.isBattery && delegateRoot.battGlyph !== "") ? (popupWindow.layoutConfig.padding + battIconBadge.width + (8 * popupWindow.uiScale)) : popupWindow.layoutConfig.padding
                         anchors.right: parent.right
+                        anchors.rightMargin: popupWindow.layoutConfig.padding
                         anchors.top: parent.top
-                        anchors.margins: popupWindow.layoutConfig.padding
+                        anchors.topMargin: popupWindow.layoutConfig.padding
                         spacing: 6 * popupWindow.uiScale
 
                         Text {
