@@ -5,11 +5,19 @@ PRESET_DIR="$HOME/.config/easyeffects/output"
 PRESET_NAME="live_eq"
 PRESET_FILE="$PRESET_DIR/${PRESET_NAME}.json"
 
+SLOTS_FILE="$HOME/.local/state/quickshell/eq_slots.json"
+
 mkdir -p "$PRESET_DIR"
+mkdir -p "$(dirname "$SLOTS_FILE")"
 
 # Default state (Now includes "pending": false)
 if [ ! -f "$STATE_FILE" ]; then
     echo '{"b1": 0, "b2": 0, "b3": 0, "b4": 0, "b5": 0, "b6": 0, "b7": 0, "b8": 0, "b9": 0, "b10": 0, "preset": "Flat", "pending": false}' > "$STATE_FILE"
+fi
+
+# Default 3 custom slots (persists across reboots, unlike STATE_FILE)
+if [ ! -f "$SLOTS_FILE" ]; then
+    echo '{"1":{"name":"Slot 1","bands":null},"2":{"name":"Slot 2","bands":null},"3":{"name":"Slot 3","bands":null}}' > "$SLOTS_FILE"
 fi
 
 apply_eq() {
@@ -46,6 +54,46 @@ save_preset() {
        '{"b1": $b1, "b2": $b2, "b3": $b3, "b4": $b4, "b5": $b5, "b6": $b6, "b7": $b7, "b8": $b8, "b9": $b9, "b10": $b10, "preset": $p, "pending": false}' > "$STATE_FILE"
 }
 
+get_slots() {
+    cat "$SLOTS_FILE"
+}
+
+save_slot() {
+    local n="$1"
+    local cur bands slots updated
+    cur=$(cat "$STATE_FILE")
+    bands=$(echo "$cur" | jq -c '[.b1,.b2,.b3,.b4,.b5,.b6,.b7,.b8,.b9,.b10] | map(tonumber)')
+    slots=$(cat "$SLOTS_FILE")
+    updated=$(echo "$slots" | jq -c --arg n "$n" --argjson bands "$bands" '.[$n].bands = $bands')
+    echo "$updated" > "$SLOTS_FILE"
+}
+
+load_slot() {
+    local n="$1"
+    local slots bands name updated
+    slots=$(cat "$SLOTS_FILE")
+    bands=$(echo "$slots" | jq -c --arg n "$n" '.[$n].bands')
+    name=$(echo "$slots" | jq -r --arg n "$n" '.[$n].name')
+
+    if [ "$bands" = "null" ]; then
+        exit 0
+    fi
+
+    updated=$(jq -n -c --argjson b "$bands" --arg p "$name" \
+      '{"b1": $b[0], "b2": $b[1], "b3": $b[2], "b4": $b[3], "b5": $b[4], "b6": $b[5], "b7": $b[6], "b8": $b[7], "b9": $b[8], "b10": $b[9], "preset": $p, "pending": false}')
+    echo "$updated" > "$STATE_FILE"
+    apply_eq
+}
+
+rename_slot() {
+    local n="$1"
+    local newname="$2"
+    local slots updated
+    slots=$(cat "$SLOTS_FILE")
+    updated=$(echo "$slots" | jq -c --arg n "$n" --arg name "$newname" '.[$n].name = $name')
+    echo "$updated" > "$SLOTS_FILE"
+}
+
 cmd=$1
 arg1=$2
 arg2=$3
@@ -53,20 +101,17 @@ arg2=$3
 case $cmd in
     "get") cat "$STATE_FILE" ;;
     "set_band")
-        # SLIDER MOVE: Set pending = true, Preset = Custom. DO NOT APPLY.
         tmp=$(cat "$STATE_FILE")
         updated=$(echo "$tmp" | jq -c --arg val "$arg2" ".b$arg1 = \$val | .preset = \"Custom\" | .pending = true")
         echo "$updated" > "$STATE_FILE"
         ;;
     "apply")
-        # APPLY BUTTON: Set pending = false, then Apply.
         tmp=$(cat "$STATE_FILE")
         updated=$(echo "$tmp" | jq -c ".pending = false")
         echo "$updated" > "$STATE_FILE"
         apply_eq
         ;;
     "preset")
-        # PRESET CLICK: Save values (pending=false) and Apply Instantly.
         case $arg1 in
             "Flat")    save_preset 0 0 0 0 0 0 0 0 0 0 "Flat" ;;
             "Bass")    save_preset 5 7 5 2 1 0 0 0 1 2 "Bass" ;;
@@ -79,5 +124,8 @@ case $cmd in
         esac
         apply_eq
         ;;
+    "get_slots") get_slots ;;
+    "save_slot") save_slot "$arg1" ;;
+    "load_slot") load_slot "$arg1" ;;
+    "rename_slot") rename_slot "$arg1" "$arg2" ;;
 esac
-

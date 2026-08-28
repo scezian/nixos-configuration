@@ -60,6 +60,14 @@ Item {
         "preset": "Flat", "pending": false
     }
 
+    // Custom EQ save-slots (persisted on disk by equalizer.sh, survives reboot)
+    property var slotsData: ({
+        "1": {"name": "Slot 1", "bands": null},
+        "2": {"name": "Slot 2", "bands": null},
+        "3": {"name": "Slot 3", "bands": null}
+    })
+    property real lastSlotsUpdate: 0
+
     // Accumulators for Process standard output
     property string accumulatedMusicOut: ""
     property string accumulatedEqOut: ""
@@ -257,6 +265,40 @@ Item {
         }
     }
 
+    function saveToSlot(n) {
+        var temp = Object.assign({}, root.slotsData);
+        var bands = [];
+        for (var i = 1; i <= 10; i++) bands.push(Number(root.eqData["b" + i]));
+        temp[n] = Object.assign({}, temp[n], {"bands": bands});
+        root.slotsData = temp;
+        root.lastSlotsUpdate = Date.now();
+        root.execCmd(`$HOME/.config/hypr/scripts/quickshell/music/equalizer.sh save_slot ${n}`);
+    }
+
+    function loadFromSlot(n) {
+        var slot = root.slotsData[n];
+        if (!slot || !slot.bands) return;
+        var temp = Object.assign({}, root.eqData);
+        for (var i = 0; i < 10; i++) temp["b" + (i + 1)] = slot.bands[i];
+        temp.preset = slot.name;
+        temp.pending = false;
+        root.eqData = temp;
+        root.lastEqUpdate = Date.now();
+        root.triggerEqLightning();
+        root.execCmd(`$HOME/.config/hypr/scripts/quickshell/music/equalizer.sh load_slot ${n}`);
+    }
+
+    function renameSlot(n, newName) {
+        var safe = String(newName).trim();
+        if (safe.length === 0) return;
+        var temp = Object.assign({}, root.slotsData);
+        temp[n] = Object.assign({}, temp[n], {"name": safe});
+        root.slotsData = temp;
+        root.lastSlotsUpdate = Date.now();
+        var escaped = safe.replace(/"/g, '\\"');
+        root.execCmd(`$HOME/.config/hypr/scripts/quickshell/music/equalizer.sh rename_slot ${n} "${escaped}"`);
+    }
+
     // --- DATA POLLING ---
     Timer {
         id: seekDebounceTimer
@@ -278,6 +320,24 @@ Item {
         onTriggered: {
             if (!musicProc.running) musicProc.running = true;
             if (!eqProc.running) eqProc.running = true;
+            if (!slotsProc.running) slotsProc.running = true;
+        }
+    }
+
+    Process {
+        id: slotsProc
+        running: true
+        command: ["bash", "-c", "$HOME/.config/hypr/scripts/quickshell/music/equalizer.sh get_slots"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (this.text) {
+                    if (Date.now() - root.lastSlotsUpdate < 2000) return;
+                    var outStr = this.text.trim();
+                    if (outStr.length > 0) {
+                        try { root.slotsData = JSON.parse(outStr); } catch(e) {}
+                    }
+                }
+            }
         }
     }
 
@@ -1429,6 +1489,24 @@ Item {
                                 delegate: PresetButton { name: modelData }
                             }
                         }
+
+                        Text {
+                            text: "Custom Slots"
+                            color: root.overlay1
+                            font.family: "JetBrains Mono"
+                            font.pixelSize: root.s(11)
+                            font.bold: true
+                            Layout.topMargin: root.s(4)
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: root.s(10)
+                            Repeater {
+                                model: [1, 2, 3]
+                                delegate: SlotButton { slotNum: modelData }
+                            }
+                        }
                     }
                 }
             }
@@ -1467,6 +1545,135 @@ Item {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: root.applyPresetOptimistically(parent.name)
+        }
+    }
+
+    // --- HELPER COMPONENT FOR CUSTOM SAVE SLOTS ---
+    component SlotButton : Rectangle {
+        id: slotRoot
+        property int slotNum: 1
+        property var slotInfo: root.slotsData[String(slotNum)] || ({"name": "Slot " + slotNum, "bands": null})
+        property bool hasData: slotInfo.bands !== null && slotInfo.bands !== undefined
+        property bool isActivePreset: hasData && root.eqData && root.eqData.preset === slotInfo.name
+        property bool isHovered: slotHoverMa.containsMouse
+        property bool editing: false
+
+        Layout.fillWidth: true
+        Layout.preferredHeight: root.s(40)
+        radius: root.s(8)
+        color: isActivePreset ? root.mauve : (isHovered ? root.surface1 : "#BF1E1E2E")
+        border.width: hasData ? 0 : 1
+        border.color: root.overlay0
+
+        Behavior on color { ColorAnimation { duration: 200 } }
+
+        MouseArea {
+            id: slotHoverMa
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: (slotRoot.hasData && !slotRoot.editing) ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: {
+                if (slotRoot.hasData && !slotRoot.editing) {
+                    root.loadFromSlot(slotRoot.slotNum);
+                }
+            }
+        }
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: root.s(12)
+            anchors.rightMargin: root.s(6)
+            spacing: root.s(4)
+
+            Text {
+                visible: !slotRoot.editing
+                Layout.fillWidth: true
+                text: slotRoot.slotInfo.name + (slotRoot.hasData ? "" : " · empty")
+                color: slotRoot.isActivePreset ? root.base : (slotRoot.hasData ? (slotRoot.isHovered ? root.text : root.subtext0) : root.overlay1)
+                font.family: "JetBrains Mono"
+                font.pixelSize: root.s(12)
+                font.bold: true
+                elide: Text.ElideRight
+            }
+
+            TextInput {
+                id: nameInput
+                visible: slotRoot.editing
+                Layout.fillWidth: true
+                color: root.text
+                font.family: "JetBrains Mono"
+                font.pixelSize: root.s(12)
+                font.bold: true
+                selectByMouse: true
+                onAccepted: {
+                    root.renameSlot(slotRoot.slotNum, text);
+                    slotRoot.editing = false;
+                }
+                onActiveFocusChanged: {
+                    if (!activeFocus && slotRoot.editing) {
+                        root.renameSlot(slotRoot.slotNum, text);
+                        slotRoot.editing = false;
+                    }
+                }
+                Keys.onEscapePressed: {
+                    slotRoot.editing = false;
+                }
+            }
+
+            Rectangle {
+                Layout.preferredWidth: root.s(26)
+                Layout.preferredHeight: root.s(26)
+                radius: root.s(13)
+                color: renameMa.containsMouse ? root.surface2 : "transparent"
+                Behavior on color { ColorAnimation { duration: 150 } }
+
+                Text {
+                    anchors.centerIn: parent
+                    text: ""
+                    color: renameMa.containsMouse ? root.text : root.subtext0
+                    font.family: "Iosevka Nerd Font"
+                    font.pixelSize: root.s(13)
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                }
+
+                MouseArea {
+                    id: renameMa
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        slotRoot.editing = true;
+                        nameInput.text = slotRoot.slotInfo.name;
+                        nameInput.forceActiveFocus();
+                        nameInput.selectAll();
+                    }
+                }
+            }
+
+            Rectangle {
+                Layout.preferredWidth: root.s(26)
+                Layout.preferredHeight: root.s(26)
+                radius: root.s(13)
+                color: saveMa.containsMouse ? root.surface2 : "transparent"
+                Behavior on color { ColorAnimation { duration: 150 } }
+
+                Text {
+                    anchors.centerIn: parent
+                    text: ""
+                    color: saveMa.containsMouse ? root.mauve : root.subtext0
+                    font.family: "Iosevka Nerd Font"
+                    font.pixelSize: root.s(13)
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                }
+
+                MouseArea {
+                    id: saveMa
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.saveToSlot(slotRoot.slotNum)
+                }
+            }
         }
     }
 }
