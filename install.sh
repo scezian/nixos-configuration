@@ -1606,6 +1606,12 @@ printf "  -> NetworkManager enabled %-20s ${C_GREEN}[ OK ]${RESET}\n" ""
 sudo systemctl enable --now power-profiles-daemon.service 2>/dev/null || true
 printf "  -> Power Profiles Daemon enabled %-13s ${C_GREEN}[ OK ]${RESET}\n" ""
 
+# --- Tailscale: disable MagicDNS override so it doesn't hijack public DNS resolution ---
+if command -v tailscale &>/dev/null && tailscale status &>/dev/null; then
+    sudo tailscale set --operator="$USER" --accept-dns=false
+    printf "  -> Tailscale MagicDNS override disabled %-9s ${C_GREEN}[ OK ]${RESET}\n" ""
+fi
+
 # 7. Setup SDDM Theme and Config
 if [[ "$SETUP_SDDM_THEME" == true ]]; then
     if [ -d "$REPO_DIR/.config/sddm/themes/matugen-minimal" ]; then
