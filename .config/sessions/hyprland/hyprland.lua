@@ -7,7 +7,7 @@
 -- wallpaper is picked through the Quickshell picker, so this require (and the
 -- one in config/settings.lua) will error until then. Not automated yet, same
 -- as before — just flagging it survived the migration unchanged.
-require("colors")
+pcall(require, "colors") -- missing on fresh installs until matugen runs
 
 hl.define_submap("passthru", function()
     -- Dummy bind to force Hyprland to register the submap in memory.

@@ -1781,6 +1781,14 @@ if [ ${#FAILED_PKGS[@]} -ne 0 ]; then
     echo ""
 fi
 
+# Generate initial matugen colors so colors.lua exists before first Hyprland launch
+FIRST_WP="$(find "$HOME/Pictures/Wallpapers" -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' \) 2>/dev/null | head -1)"
+if [ -n "$FIRST_WP" ]; then
+    matugen image "$FIRST_WP" --source-color-index 0 || echo -e "${C_YELLOW}matugen first run failed; pick a wallpaper to generate colors.lua${RESET}"
+else
+    echo -e "${C_YELLOW}No wallpapers in ~/Pictures/Wallpapers; colors.lua not generated${RESET}"
+fi
+
 echo -e "Old configurations backed up to: ${C_CYAN}$BACKUP_DIR${RESET}"
 kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true
 
