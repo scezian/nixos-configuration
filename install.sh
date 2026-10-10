@@ -1640,6 +1640,7 @@ EOF
         sudo chown $USER:$USER /usr/share/sddm/themes/matugen-minimal/Colors.qml
 
         sudo mkdir -p /etc/sddm.conf.d
+        sudo mkdir -p /usr/share/sddm/faces && sudo chown "$USER:" /usr/share/sddm/faces
         if [[ "$SDDM_WAYLAND" == true ]]; then
             cat <<EOF | sudo tee /etc/sddm.conf.d/10-wayland-matugen.conf > /dev/null
 [Theme]

@@ -40,7 +40,8 @@ hl.bind(mainMod .. " + SHIFT + down",  hl.dsp.window.resize({ x = 0, y = 50 }), 
 
 -- ───────── Applications & Launchers ─────────
 hl.bind(mainMod .. " + Return", hl.dsp.exec_cmd(terminal))
-hl.bind(mainMod .. " + A", hl.dsp.exec_cmd("pkill rofi || true && rofi -show drun -modi drun,filebrowser,run,window"))
+-- hl.bind(mainMod .. " + A", hl.dsp.exec_cmd("pkill rofi || true && rofi -show drun -modi drun,filebrowser,run,window"))  -- disabled: SUPER+A now opens the avatar picker
+hl.bind(mainMod .. " + A", hl.dsp.exec_cmd("~/.config/hypr/scripts/qs_manager.sh toggle avatar"))
 hl.bind(mainMod .. " + B", hl.dsp.exec_cmd("xdg-open \"https://\""))
 hl.bind(mainMod .. " + E", hl.dsp.exec_cmd("nautilus"))
 hl.bind(mainMod .. " + F", hl.dsp.exec_cmd("firefox"))
