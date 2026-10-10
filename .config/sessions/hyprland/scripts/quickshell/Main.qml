@@ -147,6 +147,7 @@ PanelWindow {
                 "summary": n.summary !== "" ? n.summary : "No Title",
                 "body": n.body !== "" ? n.body : "",
                 "iconPath": n.appIcon !== "" ? n.appIcon : "",
+                "time": Math.floor(Date.now() / 1000),
                 "notif": n
             };
 

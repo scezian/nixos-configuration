@@ -12,6 +12,29 @@ Item {
     // --- RECEIVE THE DBUS LIST FROM MAIN.QML ---
     property var notifModel
 
+    // --- Notification timestamps ---
+    property real nowSec: Math.floor(Date.now() / 1000)
+    Timer {
+        interval: 30000
+        running: true
+        repeat: true
+        onTriggered: window.nowSec = Math.floor(Date.now() / 1000)
+    }
+    function formatTime(t, now) {
+        if (!t || t <= 0) return "";
+        var diff = Math.max(0, now - t);
+        if (diff < 60) return "just now";
+        if (diff < 3600) return Math.floor(diff / 60) + "m ago";
+        var d = new Date(t * 1000);
+        var n = new Date(now * 1000);
+        var clock = ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
+        var startToday = new Date(n.getFullYear(), n.getMonth(), n.getDate()).getTime() / 1000;
+        if (t >= startToday) return clock;
+        if (t >= startToday - 86400) return "Yesterday " + clock;
+        var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        return d.getDate() + " " + months[d.getMonth()] + " " + clock;
+    }
+
     // --- Responsive Scaling Logic ---
     Scaler {
         id: scaler
@@ -587,6 +610,15 @@ Item {
                                                 color: window.text
                                                 Layout.fillWidth: true
                                                 wrapMode: Text.Wrap
+                                            }
+
+                                            // Timestamp
+                                            Text {
+                                                text: window.formatTime(model.time, window.nowSec)
+                                                visible: text !== ""
+                                                font.family: "JetBrains Mono"
+                                                font.pixelSize: window.s(10)
+                                                color: window.overlay0
                                             }
 
                                             // Individual Dismiss Button
