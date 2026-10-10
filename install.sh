@@ -1659,6 +1659,8 @@ EOF
         fi
 
         printf "  -> SDDM Theme configured %-17s ${C_GREEN}[ OK ]${RESET}\n" ""
+    else
+        echo -e "  -> ${C_YELLOW}SDDM theme not found at $REPO_DIR/.config/sddm/themes/matugen-minimal - skipped${RESET}"
     fi
 fi
 
