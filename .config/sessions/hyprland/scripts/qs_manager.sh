@@ -27,9 +27,11 @@ if [[ "$ACTION" =~ ^[0-9]+$ ]]; then
     WORKSPACE_NUM="$ACTION"
     echo "close" > "$IPC_FILE"
     
-    CMD="workspace $WORKSPACE_NUM"
-    [[ "$2" == "move" ]] && CMD="movetoworkspace $WORKSPACE_NUM"
-    hyprctl --batch "dispatch $CMD" >/dev/null 2>&1
+    if [[ "$2" == "move" ]]; then
+        hyprctl dispatch "hl.dsp.window.move({ workspace = $WORKSPACE_NUM })" >/dev/null 2>&1
+    else
+        hyprctl dispatch "hl.dsp.focus({ workspace = $WORKSPACE_NUM })" >/dev/null 2>&1
+    fi
     exit 0
 fi
 
