@@ -329,6 +329,8 @@ Item {
                 Slider {
                     id: zoomSlider
                     Layout.fillWidth: true
+                    Layout.preferredHeight: window.s(28)
+                    implicitHeight: window.s(28)
                     from: 1
                     to: 3
                     stepSize: 0.01

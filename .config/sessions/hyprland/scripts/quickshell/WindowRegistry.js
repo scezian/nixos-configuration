@@ -51,6 +51,7 @@ function getLayout(name, mx, my, mw, mh, userScale) {
         "calendar":  { w: s(1450, scale), h: s(750, scale), rx: Math.floor((mw/2)-(s(1450, scale)/2)), ry: s(60, scale), comp: "calendar/CalendarPopup.qml" },
 	"updater": { w: s(950, scale), h: s(850, scale), rx: Math.floor((mw/2)-(s(950, scale)/2)), ry: Math.floor((mh/2)-(s(850, scale)/2)), comp: "updater/UpdaterPopup.qml" },
         "avatar":    { w: s(820, scale), h: s(640, scale), rx: Math.floor((mw/2)-(s(820, scale)/2)), ry: Math.floor((mh/2)-(s(640, scale)/2)), comp: "avatar/AvatarPopup.qml" },
+        "animations": { w: s(780, scale), h: s(600, scale), rx: Math.floor((mw/2)-(s(780, scale)/2)), ry: Math.floor((mh/2)-(s(600, scale)/2)), comp: "animation/AnimationPopup.qml" },
         "wallpaper": { w: mw, h: s(650, scale), rx: 0, ry: Math.floor((mh/2)-(s(650, scale)/2)), comp: "wallpaper/WallpaperPicker.qml" },
         
         // --- Top Left Edge ---

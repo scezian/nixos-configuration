@@ -103,3 +103,6 @@ hl.bind(mainMod .. " + mouse_down", hl.dsp.focus({ workspace = "e+1" }))
 hl.bind(mainMod .. " + mouse_up", hl.dsp.focus({ workspace = "e-1" }))
 hl.bind(mainMod .. " + SHIFT + N", hl.dsp.exec_cmd("bash ~/.config/hypr/scripts/qs_manager.sh toggle notepad"))
 hl.bind(mainMod .. " + CTRL + Q", hl.dsp.exec_cmd("bash ~/.config/hypr/scripts/qs_manager.sh toggle music"))
+
+-- SUPER+X opens the workspace animation picker
+hl.bind(mainMod .. " + X", hl.dsp.exec_cmd("~/.config/hypr/scripts/qs_manager.sh toggle animations"))

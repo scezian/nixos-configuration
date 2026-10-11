@@ -63,6 +63,13 @@ hl.animation({ leaf = "layers",              enabled = true, speed = 5, bezier =
 hl.animation({ leaf = "layersIn",            enabled = true, speed = 5, bezier = "myBezier", style = "fade" })
 hl.animation({ leaf = "layersOut",           enabled = true, speed = 5, bezier = "myBezier", style = "fade" })
 hl.animation({ leaf = "fade",                enabled = true, speed = 5, bezier = "myBezier" })
-hl.animation({ leaf = "workspaces",          enabled = true, speed = 5, bezier = "myBezier", style = "slide" })
+-- Workspace animation choice (written by the animation picker popup).
+-- No file on a fresh install -> default slide.
+package.loaded["config.animation_choice"] = nil
+local ok_anim, anim = pcall(require, "config.animation_choice")
+if not ok_anim or type(anim) ~= "table" then
+    anim = { style = "slide", speed = 5, enabled = true }
+end
+hl.animation({ leaf = "workspaces", enabled = anim.enabled, speed = anim.speed, bezier = "myBezier", style = anim.style })
 hl.animation({ leaf = "specialWorkspaceIn",  enabled = true, speed = 5, bezier = "myBezier", style = "fade" })
 hl.animation({ leaf = "specialWorkspaceOut", enabled = true, speed = 5, bezier = "myBezier", style = "fade" })
