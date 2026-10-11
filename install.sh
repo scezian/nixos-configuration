@@ -103,7 +103,6 @@ fi
 OPT_SDDM=false
 OPT_NVIM=false
 OPT_ZSH=false
-OPT_WALLPAPERS=false
 
 INSTALL_NVIM=false
 INSTALL_ZSH=false
@@ -899,14 +898,12 @@ prompt_optional_features_menu() {
         local S_SDDM=$( [ "$OPT_SDDM" = true ] && echo -e "${C_GREEN}[✓]${RESET}" || echo -e "${DIM}[ ]${RESET}" )
         local S_NVIM=$( [ "$OPT_NVIM" = true ] && echo -e "${C_GREEN}[✓]${RESET}" || echo -e "${DIM}[ ]${RESET}" )
         local S_ZSH=$( [ "$OPT_ZSH" = true ] && echo -e "${C_GREEN}[✓]${RESET}" || echo -e "${DIM}[ ]${RESET}" )
-        local S_WP=$( [ "$OPT_WALLPAPERS" = true ] && echo -e "${C_GREEN}[✓]${RESET}" || echo -e "${DIM}[ ]${RESET}" )
 
         local MENU_ITEMS="1. $S_SDDM $DM_LABEL\n"
         MENU_ITEMS+="2. $S_NVIM Neovim Matugen Configuration\n"
         MENU_ITEMS+="3. $S_ZSH Zsh Shell Setup\n"
-        MENU_ITEMS+="4. $S_WP Download FULL Wallpaper Pack (Unchecked = 3 Random)\n"
-        MENU_ITEMS+="5. ${BOLD}${C_GREEN}Proceed with Installation / Update${RESET}\n"
-        MENU_ITEMS+="6. ${DIM}Back to Main Menu${RESET}"
+        MENU_ITEMS+="4. ${BOLD}${C_GREEN}Proceed with Installation / Update${RESET}\n"
+        MENU_ITEMS+="5. ${DIM}Back to Main Menu${RESET}"
 
         local choice
         choice=$(echo -e "$MENU_ITEMS" | fzf \
@@ -923,8 +920,7 @@ prompt_optional_features_menu() {
             *"1."*) OPT_SDDM=$([ "$OPT_SDDM" = true ] && echo false || echo true) ;;
             *"2."*) OPT_NVIM=$([ "$OPT_NVIM" = true ] && echo false || echo true) ;;
             *"3."*) OPT_ZSH=$([ "$OPT_ZSH" = true ] && echo false || echo true) ;;
-            *"4."*) OPT_WALLPAPERS=$([ "$OPT_WALLPAPERS" = true ] && echo false || echo true) ;;
-            *"5."*) 
+            *"4."*) 
                 if [ "$OPT_SDDM" = true ]; then
                     if [[ -z "$CURRENT_DM" ]]; then
                         INSTALL_SDDM=true
@@ -961,7 +957,7 @@ prompt_optional_features_menu() {
                 fi
                 return 0 
                 ;;
-            *"6."*) return 1 ;;
+            *"5."*) return 1 ;;
             *) ;;
         esac
     done
@@ -1207,57 +1203,32 @@ fi
 echo -e "\n${C_CYAN}[ INFO ]${RESET} Fetching Wallpapers..."
 mkdir -p "$WALLPAPER_DIR"
 
-if [ "$(ls -A "$WALLPAPER_DIR" 2>/dev/null | grep -E '\.(jpg|png|jpeg|gif|webp)$')" ]; then
-    echo -e "  -> ${C_GREEN}Wallpapers already present in $WALLPAPER_DIR. Skipping download.${RESET}"
-else
-    WALLPAPER_REPO="https://github.com/ilyamiro/shell-wallpapers.git"
-    WALLPAPER_CLONE_DIR="/tmp/shell-wallpapers"
-
-    if [ -d "$WALLPAPER_CLONE_DIR" ]; then
-        rm -rf "$WALLPAPER_CLONE_DIR"
-    fi
-
-    if [[ "$OPT_WALLPAPERS" == true ]]; then
-        git clone --progress "$WALLPAPER_REPO" "$WALLPAPER_CLONE_DIR" 2>&1 | tr '\r' '\n' | while read -r line; do
-            if [[ "$line" =~ Receiving\ objects:\ *([0-9]+)% ]]; then
-                pc="${BASH_REMATCH[1]}"
-                fill=$(printf "%*s" $((pc / 2)) "" | tr ' ' '#')
-                empty=$(printf "%*s" $((50 - (pc / 2))) "" | tr ' ' '-')
-                printf "\r\033[K  -> Downloading: [%s%s] %3d%%" "$fill" "$empty" "$pc"
-            fi
-        done
-        echo "" 
-
-        if [ -d "$WALLPAPER_CLONE_DIR/images" ]; then
-            cp -r "$WALLPAPER_CLONE_DIR/images/"* "$WALLPAPER_DIR/" 2>/dev/null || true
+# --- Custom wallpaper pack (scezian/wallpapers release) ---
+# Runs first; if it succeeds the folder has images, so the default-pack logic below
+# takes its "already present" path. If it fails, the default pack is the fallback.
+CUSTOM_WP_URL="https://github.com/scezian/wallpapers/releases/download/v1/wallpapers.zip"
+if ! ls "$WALLPAPER_DIR" 2>/dev/null | grep -qiE '\.(jpg|png|jpeg|gif|webp)$'; then
+    echo -e "  -> ${C_CYAN}Downloading custom wallpaper pack...${RESET}"
+    _wp_tmp="$(mktemp -d)"
+    if curl -fL --retry 3 --connect-timeout 15 --progress-bar -o "$_wp_tmp/wallpapers.zip" "$CUSTOM_WP_URL" \
+       && unzip -q -o "$_wp_tmp/wallpapers.zip" -d "$_wp_tmp/x"; then
+        if [ -d "$_wp_tmp/x/Wallpapers" ]; then
+            cp -r "$_wp_tmp/x/Wallpapers/." "$WALLPAPER_DIR/"
         else
-            cp -r "$WALLPAPER_CLONE_DIR/"* "$WALLPAPER_DIR/" 2>/dev/null || true
+            cp -r "$_wp_tmp/x/." "$WALLPAPER_DIR/"
         fi
-        rm -rf "$WALLPAPER_CLONE_DIR"
-        printf "  -> Full wallpaper pack installed to %-12s ${C_GREEN}[ OK ]${RESET}\n" "$WALLPAPER_DIR"
+        printf "  -> Custom wallpaper pack installed to %-12s ${C_GREEN}[ OK ]${RESET}\n" "$WALLPAPER_DIR"
     else
-        echo -e "  -> ${C_CYAN}Fetching 3 random wallpapers to save time...${RESET}"
-        mkdir -p "$WALLPAPER_CLONE_DIR"
-        (
-            cd "$WALLPAPER_CLONE_DIR" || exit
-            git init -q
-            git remote add origin "$WALLPAPER_REPO"
-            git fetch --depth 1 --filter=blob:none origin HEAD -q
-            RANDOM_PICS=$(git ls-tree -r FETCH_HEAD --name-only | grep -iE '\.(jpg|jpeg|png|gif|webp)$' | shuf -n 3)
-            if [ -n "$RANDOM_PICS" ]; then
-                for pic in $RANDOM_PICS; do
-                    filename=$(basename "$pic")
-                    echo -n "    -> Downloading $filename... "
-                    git show FETCH_HEAD:"$pic" > "$WALLPAPER_DIR/$filename" 2>/dev/null
-                    echo -e "${C_GREEN}[ DONE ]${RESET}"
-                done
-            else
-                echo -e "    -> ${C_RED}Could not find any images in the repository.${RESET}"
-            fi
-        )
-        rm -rf "$WALLPAPER_CLONE_DIR"
-        printf "  -> Random wallpapers installed to %-12s ${C_GREEN}[ OK ]${RESET}\n" "$WALLPAPER_DIR"
+        echo -e "  -> ${C_YELLOW}Custom wallpaper pack download failed; falling back to the default pack.${RESET}"
     fi
+    rm -rf "$_wp_tmp"
+fi
+
+if [ "$(ls -A "$WALLPAPER_DIR" 2>/dev/null | grep -E '\.(jpg|png|jpeg|gif|webp)$')" ]; then
+    echo -e "  -> ${C_GREEN}Wallpapers present in $WALLPAPER_DIR.${RESET}"
+else
+    echo -e "  -> ${C_YELLOW}No wallpapers were installed (custom pack download failed).${RESET}"
+    echo -e "     Add images to $WALLPAPER_DIR, or re-run the installer when you're online."
 fi
 
 # --- 4. Copying Dotfiles & Backups ---
