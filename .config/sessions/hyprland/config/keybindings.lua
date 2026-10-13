@@ -106,3 +106,15 @@ hl.bind(mainMod .. " + CTRL + Q", hl.dsp.exec_cmd("bash ~/.config/hypr/scripts/q
 
 -- SUPER+X opens the workspace animation picker
 hl.bind(mainMod .. " + X", hl.dsp.exec_cmd("~/.config/hypr/scripts/qs_manager.sh toggle animations"))
+
+-- SUPER+J opens the Defaults & keybinds popup
+hl.bind(mainMod .. " + J", hl.dsp.exec_cmd("~/.config/hypr/scripts/qs_manager.sh toggle defaultapps"))
+
+-- App launcher shortcuts managed by the Default apps popup (config/app_keybinds.lua)
+package.loaded["config.app_keybinds"] = nil
+local ok_appkb, app_kbs = pcall(require, "config.app_keybinds")
+if ok_appkb and type(app_kbs) == "table" then
+    for _, kb in ipairs(app_kbs) do
+        pcall(function() hl.bind(kb.combo, hl.dsp.exec_cmd(kb.cmd)) end)
+    end
+end
