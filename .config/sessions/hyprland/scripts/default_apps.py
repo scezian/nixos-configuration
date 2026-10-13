@@ -279,8 +279,15 @@ def cmd_list():
     for c, cur in zip(CATEGORIES, currents):
         cand = candidates(c, apps, cur)
         name = next((x["name"] for x in cand if x["id"] == cur), "Not set")
+        cur_app = next((x for x in cand if x["id"] == cur), None)
+        missing = bool(cur) and (cur_app is None or name.endswith("(not installed)"))
+        sug = next((x for x in cand if x["id"] != cur and not x["name"].endswith("(not installed)")), None)
         res.append({"id": c["id"], "label": c["label"], "hint": c["hint"], "current": cur,
-                    "currentName": name, "apps": cand})
+                    "currentName": name, "apps": cand,
+                    "currentIcon": cur_app["icon"] if cur_app else "",
+                    "missing": missing,
+                    "suggest": {"id": sug["id"], "name": sug["name"]} if sug and (not cur or missing) else None,
+                    "mimes": list(c["mimes"][:6])})
     print(json.dumps(res))
 
 

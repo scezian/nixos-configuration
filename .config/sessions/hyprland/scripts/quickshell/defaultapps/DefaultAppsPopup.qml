@@ -12,6 +12,84 @@ Item {
     id: window
     focus: true
 
+    // open animation
+    NumberAnimation on opacity { from: 0; to: 1; duration: 200; easing.type: Easing.OutCubic }
+    NumberAnimation on scale { from: 0.96; to: 1; duration: 240; easing.type: Easing.OutBack }
+
+    // keyboard
+    Process {
+        id: closer
+        command: ["bash", "-c", "~/.config/hypr/scripts/qs_manager.sh close"]
+    }
+    Keys.onPressed: (e) => {
+        if (e.key === Qt.Key_Slash && window.page === "apps") { appSearch.forceActiveFocus(); e.accepted = true; }
+        else if ((e.key === Qt.Key_Return || e.key === Qt.Key_Enter) && window.page === "apps") {
+            var a = window.filteredApps[window.appSel];
+            if (a) window.setDefault(a); else if (window.cat && window.cat.suggest) window.setDefault(window.cat.suggest);
+            e.accepted = true;
+        }
+        else if (e.key === Qt.Key_Tab && window.page === "apps") { window.appSel = Math.min(window.filteredApps.length - 1, window.appSel + 1); e.accepted = true; }
+        else if (e.key === Qt.Key_Backtab && window.page === "apps") { window.appSel = Math.max(0, window.appSel - 1); e.accepted = true; }
+        else if (e.key === Qt.Key_Escape) { closer.running = false; closer.running = true; e.accepted = true; }
+        else if (window.page === "apps" && window.cats.length > 0) {
+            if (e.key === Qt.Key_Down) { window.sel = Math.min(window.cats.length - 1, window.sel + 1); e.accepted = true; }
+            else if (e.key === Qt.Key_Up) { window.sel = Math.max(0, window.sel - 1); e.accepted = true; }
+        }
+    }
+
+    // music pulse
+    property bool playing: false
+    property real pulse: 1.0
+    SequentialAnimation on pulse {
+        running: window.playing && window.visible
+        loops: Animation.Infinite
+        NumberAnimation { from: 0.5; to: 1.0; duration: 2600; easing.type: Easing.InOutSine }
+        NumberAnimation { from: 1.0; to: 0.5; duration: 2600; easing.type: Easing.InOutSine }
+    }
+    Process {
+        id: playerPoll
+        command: ["bash", "-c", "playerctl status 2>/dev/null"]
+        stdout: StdioCollector { onStreamFinished: window.playing = (this.text.trim() === "Playing") }
+    }
+    Timer {
+        interval: 4000
+        repeat: true
+        running: window.visible
+        triggeredOnStart: true
+        onTriggered: { playerPoll.running = false; playerPoll.running = true; }
+    }
+
+    // toast
+    property bool toastShown: false
+    Timer { id: toastTimer; interval: 3200; onTriggered: window.toastShown = false }
+    Rectangle {
+        id: toast
+        z: 50
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: window.toastShown ? window.s(26) : -height - window.s(10)
+        Behavior on anchors.bottomMargin { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+        opacity: window.toastShown ? 1.0 : 0.0
+        Behavior on opacity { NumberAnimation { duration: 200 } }
+        width: Math.min(parent.width * 0.7, toastText.implicitWidth + window.s(44))
+        height: toastText.implicitHeight + window.s(22)
+        radius: window.s(14)
+        color: Qt.alpha(window.crust, 0.94)
+        border.width: 1
+        border.color: window.statusError ? window.red : window.teal
+        Text {
+            id: toastText
+            anchors.centerIn: parent
+            width: parent.width - window.s(28)
+            text: window.statusText
+            wrapMode: Text.WordWrap
+            horizontalAlignment: Text.AlignHCenter
+            color: window.statusError ? window.red : window.text
+            font.family: "JetBrains Mono"
+            font.pixelSize: window.s(11)
+        }
+    }
+
     Scaler {
         id: scaler
         currentWidth: Screen.width
@@ -58,6 +136,16 @@ Item {
     property bool kbLoaded: false
     property bool kbLiveOk: true
     property string filterText: ""
+    property string appQuery: ""
+    property int appSel: 0
+    onSelChanged: appSel = 0
+    onAppQueryChanged: appSel = 0
+    readonly property var filteredApps: {
+        var a = cat ? cat.apps : [];
+        var q = appQuery.trim().toLowerCase();
+        if (q === "") return a;
+        return a.filter(function (x) { return (x.name + " " + x.id + " " + (x.exec || "")).toLowerCase().indexOf(q) !== -1; });
+    }
     readonly property string userName: Quickshell.env("USER") || ""
     property string displayName: ""
     property string appFilter: ""
@@ -118,6 +206,8 @@ Item {
     function note(msg, isError) {
         statusError = isError;
         statusText = msg;
+        toastShown = true;
+        toastTimer.restart();
     }
 
     // ---------------- default apps logic ----------------
@@ -548,6 +638,7 @@ Item {
         anchors.fill: parent
         anchors.margins: window.s(2)
         clip: true
+        opacity: window.playing ? window.pulse : 1.0
 
         Glow { tint: window.mauve; strength: 0.50; size: window.s(800); baseX: -window.s(220); baseY: -window.s(260); ampX: window.s(46); ampY: window.s(34); period: 21000 }
         Glow { tint: window.blue; strength: 0.44; size: window.s(860); baseX: window.width - window.s(560); baseY: window.height - window.s(470); ampX: window.s(50); ampY: window.s(38); period: 26000 }
@@ -905,17 +996,6 @@ Item {
                             }
                         }
 
-                        Text {
-                            Layout.fillWidth: true
-                            text: window.statusText
-                            wrapMode: Text.WordWrap
-                            maximumLineCount: 3
-                            elide: Text.ElideRight
-                            horizontalAlignment: Text.AlignHCenter
-                            color: window.statusError ? window.red : window.subtext0
-                            font.family: "JetBrains Mono"
-                            font.pixelSize: window.s(9)
-                        }
                     }
                 }
             }
@@ -1022,9 +1102,21 @@ Item {
                                 border.color: window.mauve
                                 Behavior on color { ColorAnimation { duration: 120 } }
 
+                                Image {
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: window.s(12)
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: window.s(28)
+                                    height: width
+                                    source: catRow.modelData.currentIcon ? window.iconSource(catRow.modelData.currentIcon) : ""
+                                    sourceSize: Qt.size(56, 56)
+                                    fillMode: Image.PreserveAspectFit
+                                    asynchronous: true
+                                    visible: status === Image.Ready
+                                }
                                 ColumnLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: window.s(14)
+                                    anchors.leftMargin: window.s(50)
                                     anchors.rightMargin: window.s(14)
                                     spacing: 0
                                     Item { Layout.fillHeight: true }
@@ -1037,8 +1129,8 @@ Item {
                                     }
                                     Text {
                                         Layout.fillWidth: true
-                                        text: catRow.modelData.currentName
-                                        color: window.subtext0
+                                        text: catRow.modelData.missing ? (catRow.modelData.currentName + " (missing)") : catRow.modelData.currentName
+                                        color: catRow.modelData.missing ? window.red : window.subtext0
                                         font.family: "JetBrains Mono"
                                         font.pixelSize: window.s(10)
                                         elide: Text.ElideRight
@@ -1087,6 +1179,20 @@ Item {
                                     font.pixelSize: window.s(11)
                                     elide: Text.ElideRight
                                 }
+                                StyledField {
+                                    id: appSearch
+                                    Layout.preferredWidth: window.s(170)
+                                    px: window.s(11)
+                                    bg: Qt.alpha(window.surface0, 0.8)
+                                    fg: window.text
+                                    hintColor: window.subtext0
+                                    accent: window.mauve
+                                    placeholderText: "/ search apps"
+                                    text: window.appQuery
+                                    onTextEdited: window.appQuery = text
+                                    onAccepted: { var a = window.filteredApps[window.appSel]; if (a) window.setDefault(a); }
+                                    Keys.onEscapePressed: { window.appQuery = ""; window.forceActiveFocus(); }
+                                }
                                 Chip {
                                     visible: window.cat !== null && window.cat.current !== ""
                                     label: "Reset"
@@ -1095,31 +1201,109 @@ Item {
                                     fgOff: window.subtext0
                                     onClicked: window.resetCat()
                                 }
+                                Chip {
+                                    visible: window.cat !== null && !!window.cat.suggest
+                                    label: window.cat && window.cat.suggest ? ("Suggest: " + window.cat.suggest.name) : ""
+                                    px: window.s(11)
+                                    offColor: window.mauve
+                                    fgOff: window.crust
+                                    onClicked: window.setDefault(window.cat.suggest)
+                                }
                             }
 
                             Item {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
 
+                                Rectangle {
+                                    id: detailsCard
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.bottom: parent.bottom
+                                    height: window.s(108)
+                                    radius: window.s(13)
+                                    color: Qt.alpha(window.surface0, 0.35)
+                                    border.width: 1
+                                    border.color: window.cardBorder
+                                    readonly property var app: {
+                                        if (!window.cat) return null;
+                                        for (var i = 0; i < window.cat.apps.length; i++)
+                                            if (window.cat.apps[i].id === window.cat.current) return window.cat.apps[i];
+                                        return null;
+                                    }
+                                    Process {
+                                        id: tryProc
+                                        property string appId: ""
+                                        command: ["gtk-launch", appId.replace(".desktop", "")]
+                                    }
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: window.s(14)
+                                        spacing: window.s(12)
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: window.s(3)
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: detailsCard.app ? detailsCard.app.name : "No default set"
+                                                color: window.text
+                                                font.family: "JetBrains Mono"
+                                                font.pixelSize: window.s(13)
+                                                font.bold: true
+                                                elide: Text.ElideRight
+                                            }
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: detailsCard.app ? ("File: " + detailsCard.app.id + "   Exec: " + (detailsCard.app.exec || "")) : "Pick an app below, or press Enter to take the suggestion."
+                                                color: window.subtext0
+                                                font.family: "JetBrains Mono"
+                                                font.pixelSize: window.s(10)
+                                                elide: Text.ElideRight
+                                            }
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: window.cat && window.cat.mimes ? ("Types: " + window.cat.mimes.join(", ")) : ""
+                                                color: window.subtext0
+                                                font.family: "JetBrains Mono"
+                                                font.pixelSize: window.s(10)
+                                                elide: Text.ElideRight
+                                            }
+                                        }
+                                        Chip {
+                                            visible: !!detailsCard.app
+                                            label: "Try"
+                                            px: window.s(12)
+                                            offColor: Qt.alpha(window.surface1, 0.9)
+                                            fgOff: window.text
+                                            onClicked: { tryProc.appId = detailsCard.app.id; tryProc.running = false; tryProc.running = true; }
+                                        }
+                                    }
+                                }
+
                                 ListView {
                                     id: appList
-                                    anchors.fill: parent
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    anchors.bottom: detailsCard.top
+                                    anchors.bottomMargin: window.s(8)
                                     clip: true
                                     spacing: window.s(4)
                                     boundsBehavior: Flickable.StopAtBounds
-                                    model: window.cat ? window.cat.apps : []
+                                    model: window.filteredApps
                                     ScrollBar.vertical: ScrollBar { }
 
                                     delegate: Rectangle {
                                         id: appRow
                                         required property var modelData
+                                        required property int index
                                         readonly property bool isCurrent: window.cat !== null && appRow.modelData.id === window.cat.current
 
                                         width: appList.width - window.s(8)
                                         height: window.s(56)
                                         radius: window.s(13)
                                         color: rowMa.containsMouse ? window.surface1 : (appRow.isCurrent ? Qt.alpha(window.mauve, 0.14) : Qt.alpha(window.surface0, 0.35))
-                                        border.width: appRow.isCurrent ? 1 : 0
+                                        border.width: (appRow.isCurrent || appRow.index === window.appSel) ? 1 : 0
                                         border.color: window.mauve
                                         Behavior on color { ColorAnimation { duration: 120 } }
 
@@ -1200,6 +1384,7 @@ Item {
                                             anchors.fill: parent
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
+                                            onEntered: window.appSel = appRow.index
                                             onClicked: window.setDefault(appRow.modelData)
                                         }
                                     }
