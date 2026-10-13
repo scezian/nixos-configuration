@@ -152,11 +152,23 @@ ShellRoot {
                 }
 
                 Process {
+                    id: bgFetcher
+                    command: ["bash", "-c", "[ -s /tmp/lock_bg.png ] && exit 0; f=$(awww query 2>/dev/null | grep -oE '/[^ ]+\\.(png|jpe?g|webp)' | head -n1); [ -n \"$f\" ] && cp \"$f\" /tmp/lock_bg.png"]
+                    stdout: StdioCollector {
+                        onStreamFinished: {
+                            bgWallpaper.source = "";
+                            bgWallpaper.source = screenRoot.staticWallpaperPath;
+                        }
+                    }
+                    Component.onCompleted: running = true
+                }
+
+                Process {
                     id: userPoller
                     command: [
                         "bash", 
                         "-c", 
-                        "USER_VAR=$(whoami); ICON_PATH=\"\"; if [ -f ~/.face.icon ]; then ICON_PATH=$(readlink -f ~/.face.icon); elif [ -f ~/.face ]; then ICON_PATH=$(readlink -f ~/.face); fi; echo -n \"$USER_VAR|$ICON_PATH\""
+                        "USER_VAR=$(head -n1 ~/.config/hypr/display_name 2>/dev/null); [ -z \"$USER_VAR\" ] && USER_VAR=$(whoami); ICON_PATH=\"\"; if [ -f ~/.face.icon ]; then ICON_PATH=$(readlink -f ~/.face.icon); elif [ -f ~/.face ]; then ICON_PATH=$(readlink -f ~/.face); fi; echo -n \"$USER_VAR|$ICON_PATH\""
                     ]
                     stdout: StdioCollector {
                         onStreamFinished: {
@@ -242,13 +254,29 @@ ShellRoot {
                     blurEnabled: true
                     blurMax: 64 * screenRoot.sc
                     blur: 1.0
+                    saturation: 0.35
+                    scale: 1.08
+                    SequentialAnimation on scale {
+                        loops: Animation.Infinite
+                        NumberAnimation { from: 1.08; to: 1.16; duration: 22000; easing.type: Easing.InOutSine }
+                        NumberAnimation { from: 1.16; to: 1.08; duration: 22000; easing.type: Easing.InOutSine }
+                    }
                 }
-                
+
                 Rectangle {
                     id: dimmer
                     anchors.fill: parent
                     color: "black"
-                    opacity: 0.25 
+                    opacity: 0.15
+                }
+
+                // ambient grade
+                Rectangle {
+                    anchors.fill: parent
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: Qt.alpha(root.crust, 0.25) }
+                        GradientStop { position: 1.0; color: Qt.alpha(root.crust, 0.70) }
+                    }
                 }
 
                 Item {

@@ -58,6 +58,8 @@ Item {
     property bool kbLoaded: false
     property bool kbLiveOk: true
     property string filterText: ""
+    readonly property string userName: Quickshell.env("USER") || ""
+    property string displayName: ""
     property string appFilter: ""
     property var edit: null
     property string editError: ""
@@ -625,7 +627,7 @@ Item {
                     ColumnLayout {
                         spacing: 0
                         Text {
-                            text: "Defaults"
+                            text: window.displayName !== "" ? window.displayName : "Defaults"
                             color: window.text
                             font.family: "JetBrains Mono"
                             font.pixelSize: window.s(15)
@@ -711,11 +713,12 @@ Item {
                     border.color: window.statusError ? Qt.alpha(window.red, 0.6) : window.cardBorder
 
                     function saveName() {
-                        var n = nameField.text.trim();
+                        var n = nameField.text.trim().replace(/[:\n\r]/g, "");
                         if (n === "") return;
                         nameWriter.pending = n;
                         nameWriter.running = false;
                         nameWriter.running = true;
+                        window.displayName = n; sddmWriter.pending = n; sddmWriter.running = false; sddmWriter.running = true;
                         window.note("Username set to " + n, false);
                     }
 
@@ -726,9 +729,14 @@ Item {
                         stdout: StdioCollector {
                             onStreamFinished: {
                                 var t = this.text.trim();
-                                if (t !== "") nameField.text = t;
+                                if (t !== "") { nameField.text = t; window.displayName = t; }
                             }
                         }
+                    }
+                    Process {
+                        id: sddmWriter
+                        property string pending: ""
+                        command: ["pkexec", "usermod", "-c", pending, window.userName]
                     }
                     Process {
                         id: nameWriter
@@ -743,7 +751,7 @@ Item {
                         height: parent.height * 1.7
                         x: -parent.width * 0.35
                         y: -parent.height * 0.35
-                        source: "file:///usr/share/sddm/faces/scez.face.icon"
+                        source: "file:///usr/share/sddm/faces/" + window.userName + ".face.icon"
                         fillMode: Image.PreserveAspectCrop
                         sourceSize: Qt.size(128, 128)
                         cache: false
@@ -804,7 +812,7 @@ Item {
                             Image {
                                 id: avImg
                                 anchors.fill: parent
-                                source: "file:///usr/share/sddm/faces/scez.face.icon"
+                                source: "file:///usr/share/sddm/faces/" + window.userName + ".face.icon"
                                 fillMode: Image.PreserveAspectCrop
                                 cache: false
                                 sourceSize: Qt.size(256, 256)

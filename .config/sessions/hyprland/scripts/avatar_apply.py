@@ -66,7 +66,27 @@ def run_root(cmd):
         sys.exit(f"Failed (exit {r.returncode}). Is a polkit agent running? {r.stderr.strip()}")
 
 
+def _link():
+    """Keep ~/.face.icon pointing at the SDDM face so the lock screen follows it."""
+    try:
+        link = os.path.expanduser("~/.face.icon")
+        tmp = link + ".tmp"
+        if os.path.lexists(tmp):
+            os.remove(tmp)
+        os.symlink(FACE_PATH, tmp)
+        os.replace(tmp, link)
+    except OSError:
+        pass
+
+
 def main():
+    try:
+        _main()
+    finally:
+        _link()
+
+
+def _main():
     app = QGuiApplication(sys.argv)  # noqa: F841 (needed for image plugins)
     if len(sys.argv) == 2 and sys.argv[1] == "--remove":
         if os.access(FACE_DIR, os.W_OK):
