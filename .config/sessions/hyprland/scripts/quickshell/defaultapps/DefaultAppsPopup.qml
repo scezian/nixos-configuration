@@ -831,6 +831,40 @@ Item {
                                 border.width: window.s(2)
                                 border.color: window.mauve
                             }
+                            Process {
+                                id: avatarOpener
+                                command: ["bash", "-c", "~/.config/hypr/scripts/qs_manager.sh toggle avatar"]
+                            }
+                            Rectangle {
+                                id: pencilBtn
+                                width: window.s(24)
+                                height: width
+                                radius: width / 2
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                anchors.rightMargin: -window.s(4)
+                                anchors.bottomMargin: -window.s(2)
+                                color: pencilMa.containsMouse ? window.pink : window.mauve
+                                border.width: window.s(2)
+                                border.color: window.crust
+                                scale: pencilMa.containsMouse ? 1.15 : 1.0
+                                Behavior on scale { NumberAnimation { duration: 120 } }
+                                Behavior on color { ColorAnimation { duration: 120 } }
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "\u270E"
+                                    color: window.crust
+                                    font.pixelSize: window.s(13)
+                                    font.bold: true
+                                }
+                                MouseArea {
+                                    id: pencilMa
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: { avatarOpener.running = false; avatarOpener.running = true; }
+                                }
+                            }
                         }
 
                         StyledField {

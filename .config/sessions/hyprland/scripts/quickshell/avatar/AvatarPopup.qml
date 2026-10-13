@@ -395,14 +395,14 @@ Item {
             }
         }
 
-        // ---------------- right: wallpaper grid ----------------
+        // ---------------- right: constellation ----------------
         ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: window.s(10)
 
             Text {
-                text: "Your wallpapers"
+                text: "Constellation  -  click or scroll to rotate"
                 color: window.subtext0
                 font.family: "JetBrains Mono"
                 font.pixelSize: window.s(12)
@@ -410,86 +410,192 @@ Item {
             }
 
             Rectangle {
+                id: sky
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 radius: window.s(16)
                 color: window.mantle
                 border.width: 1
-                border.color: Qt.alpha(window.surface1, 0.6)
+                border.color: Qt.alpha(window.mauve, 0.35)
 
-                GridView {
-                    id: grid
+                function pick(i) {
+                    if (wallModel.count === 0) return;
+                    var n = (i + wallModel.count) % wallModel.count;
+                    ring.currentIndex = n;
+                    window.setSource(wallModel.get(n, "filePath"));
+                }
+
+                // ambient backdrop from the picked image
+                Image {
+                    id: skySrc
                     anchors.fill: parent
-                    anchors.margins: window.s(8)
-                    clip: true
-                    cellWidth: Math.floor(width / 2)
-                    cellHeight: Math.floor(cellWidth * 0.62)
+                    source: window.srcPath !== "" ? "file://" + window.srcPath : ""
+                    fillMode: Image.PreserveAspectCrop
+                    sourceSize.width: 160
+                    asynchronous: true
+                    visible: false
+                }
+                Rectangle {
+                    id: skyMask
+                    anchors.fill: parent
+                    radius: sky.radius
+                    color: "black"
+                    visible: false
+                    layer.enabled: true
+                }
+                MultiEffect {
+                    anchors.fill: parent
+                    source: skySrc
+                    autoPaddingEnabled: false
+                    blurEnabled: true
+                    blur: 1.0
+                    blurMax: 64
+                    saturation: 0.3
+                    maskEnabled: true
+                    maskSource: skyMask
+                    opacity: window.srcPath !== "" ? 0.8 : 0.0
+                    Behavior on opacity { NumberAnimation { duration: 400 } }
+                }
+                Rectangle {
+                    anchors.fill: parent
+                    radius: sky.radius
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: Qt.alpha(window.crust, 0.35) }
+                        GradientStop { position: 1.0; color: Qt.alpha(window.crust, 0.6) }
+                    }
+                }
+
+                // orbit guide
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: ring.rx * 2
+                    height: ring.ry * 2
+                    radius: height / 2
+                    color: "transparent"
+                    border.width: 1
+                    border.color: Qt.alpha(window.mauve, 0.25)
+                }
+
+                // centre label
+                Column {
+                    anchors.centerIn: parent
+                    spacing: window.s(4)
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: wallModel.count > 0 ? String(wallModel.get(ring.currentIndex, "fileName")) : ""
+                        width: ring.rx * 1.2
+                        horizontalAlignment: Text.AlignHCenter
+                        elide: Text.ElideMiddle
+                        color: window.text
+                        font.family: "JetBrains Mono"
+                        font.pixelSize: window.s(13)
+                        font.bold: true
+                    }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: wallModel.count > 0 ? ((ring.currentIndex + 1) + " / " + wallModel.count) : ""
+                        color: window.subtext0
+                        font.family: "JetBrains Mono"
+                        font.pixelSize: window.s(11)
+                    }
+                }
+
+                PathView {
+                    id: ring
+                    anchors.fill: parent
+                    readonly property real rx: width * 0.36
+                    readonly property real ry: height * 0.26
                     model: wallModel
-                    boundsBehavior: Flickable.StopAtBounds
-                    ScrollBar.vertical: ScrollBar { }
+                    pathItemCount: Math.min(9, Math.max(1, wallModel.count))
+                    preferredHighlightBegin: 0.0
+                    preferredHighlightEnd: 0.0
+                    highlightRangeMode: PathView.StrictlyEnforceRange
+                    highlightMoveDuration: 450
+                    snapMode: PathView.SnapToItem
+                    interactive: false
+
+                    path: Path {
+                        startX: ring.width / 2
+                        startY: ring.height / 2 + ring.ry
+                        PathAttribute { name: "itemScale"; value: 1.15 }
+                        PathAttribute { name: "itemZ"; value: 10 }
+                        PathAttribute { name: "itemOp"; value: 1.0 }
+                        PathArc {
+                            x: ring.width / 2; y: ring.height / 2 - ring.ry
+                            radiusX: ring.rx; radiusY: ring.ry
+                            direction: PathArc.Clockwise
+                        }
+                        PathAttribute { name: "itemScale"; value: 0.5 }
+                        PathAttribute { name: "itemZ"; value: 0 }
+                        PathAttribute { name: "itemOp"; value: 0.45 }
+                        PathArc {
+                            x: ring.width / 2; y: ring.height / 2 + ring.ry
+                            radiusX: ring.rx; radiusY: ring.ry
+                            direction: PathArc.Clockwise
+                        }
+                        PathAttribute { name: "itemScale"; value: 1.15 }
+                        PathAttribute { name: "itemZ"; value: 10 }
+                        PathAttribute { name: "itemOp"; value: 1.0 }
+                    }
 
                     delegate: Item {
-                        id: cell
-                        width: grid.cellWidth
-                        height: grid.cellHeight
+                        id: pl
+                        width: window.s(124)
+                        height: width
+                        scale: PathView.itemScale
+                        z: PathView.itemZ
+                        opacity: PathView.itemOp
                         readonly property string path: model.filePath
-                        readonly property bool picked: window.srcPath === cell.path
+                        readonly property bool picked: window.srcPath === pl.path
 
                         Item {
-                            id: thumb
+                            id: plSrc
                             anchors.fill: parent
-                            anchors.margins: window.s(5)
-
-                            Item {
-                                id: thumbSrc
+                            visible: false
+                            layer.enabled: true
+                            Image {
                                 anchors.fill: parent
-                                visible: false
-                                clip: true
-                                layer.enabled: true
-                                Image {
-                                    anchors.fill: parent
-                                    source: "file://" + cell.path
-                                    sourceSize.width: 360
-                                    fillMode: Image.PreserveAspectCrop
-                                    asynchronous: true
-                                    cache: false
-                                }
-                            }
-                            Item {
-                                id: thumbMask
-                                anchors.fill: parent
-                                visible: false
-                                layer.enabled: true
-                                Rectangle {
-                                    anchors.fill: parent
-                                    radius: window.s(12)
-                                    color: "black"
-                                }
-                            }
-                            MultiEffect {
-                                anchors.fill: parent
-                                source: thumbSrc
-                                maskEnabled: true
-                                maskSource: thumbMask
-                                scale: thumbMa.containsMouse ? 1.03 : 1.0
-                                Behavior on scale { NumberAnimation { duration: 120 } }
-                            }
-                            Rectangle {
-                                anchors.fill: parent
-                                radius: window.s(12)
-                                color: "transparent"
-                                border.width: cell.picked ? window.s(3) : (thumbMa.containsMouse ? 1 : 0)
-                                border.color: cell.picked ? window.mauve : window.subtext0
-                            }
-                            MouseArea {
-                                id: thumbMa
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: window.setSource(cell.path)
+                                source: "file://" + pl.path
+                                sourceSize.width: 260
+                                fillMode: Image.PreserveAspectCrop
+                                asynchronous: true
+                                cache: false
                             }
                         }
+                        Item {
+                            id: plMask
+                            anchors.fill: parent
+                            visible: false
+                            layer.enabled: true
+                            Rectangle { anchors.fill: parent; radius: width / 2; color: "black" }
+                        }
+                        MultiEffect {
+                            anchors.fill: parent
+                            source: plSrc
+                            maskEnabled: true
+                            maskSource: plMask
+                        }
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: width / 2
+                            color: "transparent"
+                            border.width: pl.picked ? window.s(3) : (plMa.containsMouse ? window.s(2) : 1)
+                            border.color: pl.picked ? window.mauve : (plMa.containsMouse ? window.text : Qt.alpha(window.subtext0, 0.5))
+                        }
+                        MouseArea {
+                            id: plMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: sky.pick(index)
+                        }
                     }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.NoButton
+                    onWheel: (w) => sky.pick(ring.currentIndex + (w.angleDelta.y < 0 ? 1 : -1))
                 }
 
                 Text {
