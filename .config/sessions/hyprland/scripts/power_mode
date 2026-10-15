@@ -1,0 +1,12 @@
+#!/bin/bash
+P=/sys/devices/system/cpu
+epp() { for f in $P/cpu*/cpufreq/energy_performance_preference; do echo "$1" > "$f" 2>/dev/null; done; }
+cores() { for i in 4 5 6 7; do echo "$1" > $P/cpu$i/online; done; }
+case "$1" in
+  normal)  cores 1; echo 0 > $P/intel_pstate/no_turbo; echo 100 > $P/intel_pstate/max_perf_pct; epp balance_power ;;
+  saver)   cores 1; echo 1 > $P/intel_pstate/no_turbo; echo 40 > $P/intel_pstate/max_perf_pct; epp power ;;
+  extreme) cores 0; echo 1 > $P/intel_pstate/no_turbo; echo 25 > $P/intel_pstate/max_perf_pct; epp power ;;
+  *) echo "usage: power_mode normal|saver|extreme"; exit 1 ;;
+esac
+echo "$1" > /run/power_mode
+chmod 644 /run/power_mode

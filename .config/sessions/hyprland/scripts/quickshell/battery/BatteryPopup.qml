@@ -170,10 +170,11 @@ Item {
 
     Process {
         id: sysPoller
+        property double holdUntil: 0
         command: ["bash", "-c", 
             "cat /sys/class/power_supply/BAT*/capacity 2>/dev/null | head -n1 || echo '0'; " +
             "cat /sys/class/power_supply/BAT*/status 2>/dev/null | head -n1 || echo 'Unknown'; " +
-            "powerprofilesctl get 2>/dev/null || echo 'balanced'; " +
+            "m=$(cat /run/power_mode 2>/dev/null); case $m in saver|extreme) echo power-saver;; *) powerprofilesctl get 2>/dev/null || echo 'balanced';; esac; " +
             "awk '{print int($1/3600)\"h \"int(($1%3600)/60)\"m\"}' /proc/uptime 2>/dev/null || echo '0h 0m'; " +
             "wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null | awk '{print int($2*100), ($3==\"[MUTED]\"?\"off\":\"on\")}' || echo '0 on'; " +
             "brightnessctl -m 2>/dev/null | awk -F, '{print substr($4, 1, length($4)-1)}' || echo '0'"
@@ -188,7 +189,7 @@ Item {
                         window.animCapacity = window.batCapacity;
                     }
                     window.batStatus = lines[1];
-                    window.powerProfile = lines[2];
+                    if (Date.now() > sysPoller.holdUntil) window.powerProfile = lines[2];
                     
                     let upParts = lines[3].split("h ");
                     if (upParts.length === 2) {
@@ -1503,7 +1504,7 @@ Item {
                                         MouseArea {
                                             id: profileMa
                                             anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                            onClicked: { Quickshell.execDetached(["powerprofilesctl", "set", name]); sysPoller.running = true; }
+                                            onClicked: { sysPoller.holdUntil = Date.now() + 3000; window.powerProfile = name; Quickshell.execDetached(["bash", "-c", name === "power-saver" ? "sudo -n /usr/local/bin/power_mode saver" : "sudo -n /usr/local/bin/power_mode normal; powerprofilesctl set " + name]); }
                                         }
                                     }
                                 }

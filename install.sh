@@ -1575,6 +1575,14 @@ echo -e "\n${C_CYAN}[ INFO ]${RESET} Enabling Core System Services..."
 sudo systemctl enable NetworkManager.service
 printf "  -> NetworkManager enabled %-20s ${C_GREEN}[ OK ]${RESET}\n" ""
 sudo systemctl enable --now power-profiles-daemon.service 2>/dev/null || true
+
+# power_mode: root-owned helper + passwordless sudo for the battery popup Saver profile (Intel pstate only)
+if [ -d /sys/devices/system/cpu/intel_pstate ] && [ -f "$REPO_DIR/.config/sessions/hyprland/scripts/power_mode" ]; then
+    sudo install -m 755 -o root -g root "$REPO_DIR/.config/sessions/hyprland/scripts/power_mode" /usr/local/bin/power_mode
+    echo "$USER ALL=(root) NOPASSWD: /usr/local/bin/power_mode" | sudo tee /etc/sudoers.d/power-mode > /dev/null
+    sudo chmod 440 /etc/sudoers.d/power-mode
+    sudo visudo -cf /etc/sudoers.d/power-mode > /dev/null 2>&1 || sudo rm -f /etc/sudoers.d/power-mode
+fi
 printf "  -> Power Profiles Daemon enabled %-13s ${C_GREEN}[ OK ]${RESET}\n" ""
 
 # --- Tailscale: disable MagicDNS override so it doesn't hijack public DNS resolution ---
