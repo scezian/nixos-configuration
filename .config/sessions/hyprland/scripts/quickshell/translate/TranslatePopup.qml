@@ -38,6 +38,7 @@ Item {
     property string translated: ""
     property string phonetic: ""
     property string langs: "chi_sim+eng"
+    property int conf: 0
     property string lastRaw: ""
     property real actionTs: 0
     property string toast: ""
@@ -50,13 +51,18 @@ Item {
     readonly property string script: home + "/.config/hypr/scripts/ocr_translate.sh"
 
     readonly property var langChips: [
-        { label: "简体",   langs: "chi_sim+eng" },
-        { label: "繁體",   langs: "chi_tra+eng" },
-        { label: "日本語", langs: "jpn+eng" },
-        { label: "한국어", langs: "kor+eng" }
+        { label: "Auto-detect", langs: "auto" },
+        { label: "Chinese simplified",   langs: "chi_sim+eng" },
+        { label: "Chinese traditional",   langs: "chi_tra+eng" },
+        { label: "Japanese", langs: "jpn+eng" },
+        { label: "Korean", langs: "kor+eng" }
     ]
 
     function requestClose() { closeSequence.start(); }
+    function langLabel(l) {
+        for (let i = 0; i < langChips.length; i++) if (langChips[i].langs === l) return langChips[i].label;
+        return l;
+    }
     function copyText(t, label) {
         if (!t) return;
         Quickshell.execDetached(["wl-copy", t]);
@@ -113,6 +119,7 @@ Item {
                     root.translated = d.translated || "";
                     root.phonetic = d.phonetic || "";
                     root.langs = d.langs || root.langs;
+                    root.conf = d.conf || 0;
                 } catch (e) {}
             }
         }

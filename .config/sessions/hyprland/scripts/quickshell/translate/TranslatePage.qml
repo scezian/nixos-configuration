@@ -44,7 +44,7 @@ Item {
             ColumnLayout {
                 spacing: page.s(4)
                 Text { text: "Translate"; font.family: "JetBrains Mono"; font.weight: Font.Bold; font.pixelSize: page.s(30); color: page.cText }
-                Text { text: "Screen text to English  \u00b7  " + hub.langs; font.family: "JetBrains Mono"; font.pixelSize: page.s(11); color: page.cSub0 }
+                Text { text: "Screen text to English  \u00b7  " + hub.langLabel(hub.langs) + (hub.conf > 0 ? "  \u00b7  " + hub.conf + "% confident" : ""); font.family: "JetBrains Mono"; font.pixelSize: page.s(11); color: page.cSub0 }
             }
             Item { Layout.fillWidth: true }
             Rectangle {
