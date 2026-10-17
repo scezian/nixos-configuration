@@ -43,7 +43,7 @@ hl.bind(mainMod .. " + Return", hl.dsp.exec_cmd(terminal))
 -- hl.bind(mainMod .. " + A", hl.dsp.exec_cmd("pkill rofi || true && rofi -show drun -modi drun,filebrowser,run,window"))  -- disabled: SUPER+A now opens the avatar picker
 hl.bind(mainMod .. " + A", hl.dsp.exec_cmd("~/.config/hypr/scripts/qs_manager.sh toggle avatar"))
 hl.bind(mainMod .. " + B", hl.dsp.exec_cmd("xdg-open \"https://\""))
-hl.bind(mainMod .. " + E", hl.dsp.exec_cmd("nautilus"))
+-- [picker] hl.bind(mainMod .. " + E", hl.dsp.exec_cmd("nautilus"))
 hl.bind(mainMod .. " + F", hl.dsp.exec_cmd("firefox"))
 hl.bind("CTRL + SHIFT + S", hl.dsp.exec_cmd("spotify-launcher"))
 hl.bind("CTRL + SHIFT + tab", hl.dsp.exec_cmd("pavucontrol"))
@@ -118,3 +118,10 @@ if ok_appkb and type(app_kbs) == "table" then
         pcall(function() hl.bind(kb.combo, hl.dsp.exec_cmd(kb.cmd)) end)
     end
 end
+
+-- OCR translate
+hl.bind(mainMod .. " + T", hl.dsp.exec_cmd("bash ~/.config/hypr/scripts/qs_manager.sh toggle translate"))
+
+hl.bind(mainMod .. " + SUPER + T", hl.dsp.exec_cmd("~/.config/hypr/scripts/ocr_translate.sh --empty"))
+
+hl.bind(mainMod .. " + ALT + T", hl.dsp.exec_cmd("~/.config/hypr/scripts/ocr_translate.sh --empty"))
