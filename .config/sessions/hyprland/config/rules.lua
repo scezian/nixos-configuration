@@ -47,3 +47,5 @@ hl.window_rule({
 --     no_border = true,
 --     no_initial_focus = true,
 -- })
+
+hl.layer_rule({ name = "translate-blur", match = { namespace = "^(qs-master)$" }, blur = true, ignore_alpha = 0.3 })
