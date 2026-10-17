@@ -163,6 +163,7 @@ ARCH_PKGS=(
     "wmctrl" "power-profiles-daemon" "easyeffects" "swayosd-git" "nautilus" "lsp-plugins" "hyprpolkitagent"
     "qt5-wayland" "qt5-quickcontrols" "qt5-quickcontrols2" "qt5-graphicaleffects" "qt6-wayland"
     "qt5ct" "qt6ct" "gpu-screen-recorder" "adw-gtk-theme"
+    "tesseract" "tesseract-data-eng" "tesseract-data-chi_sim" "tesseract-data-chi_tra" "tesseract-data-jpn" "tesseract-data-kor" "translate-shell"
     "spotify-launcher" "rambox-bin" "qbittorrent"
 )
 
@@ -1477,6 +1478,23 @@ if [ -f "$HOME/.config/systemd/user/easyeffects.service" ]; then
 fi
 systemctl --user enable easyeffects.service 2>/dev/null || true
 printf "  -> EasyEffects daemon service enabled %-12s ${C_GREEN}[ OK ]${RESET}\n" ""
+
+# --- Lexicon (translate hub): Python venv + offline CC-CEDICT dictionary ---
+LEX_VENV="$HOME/.local/share/qs-venv"
+LEX_PY="${TARGET_CONFIG_DIR:-$HOME/.config}/hypr/scripts/quickshell/translate/lookup.py"
+[ -x "$LEX_VENV/bin/python" ] || python3 -m venv "$LEX_VENV" 2>/dev/null || true
+if [ -x "$LEX_VENV/bin/python" ]; then
+    "$LEX_VENV/bin/pip" install --quiet pypinyin 2>/dev/null || true
+    "$LEX_VENV/bin/pip" install --quiet jieba 2>/dev/null || true
+    if [ ! -f "$HOME/.local/share/qs-dict/cedict.db" ] && [ -f "$LEX_PY" ]; then
+        "$LEX_VENV/bin/python" "$LEX_PY" build >/dev/null 2>&1 || true
+    fi
+fi
+if [ -f "$HOME/.local/share/qs-dict/cedict.db" ]; then
+    printf "  -> Lexicon dictionary ready %-22s ${C_GREEN}[ OK ]${RESET}\n" ""
+else
+    echo "  -> Lexicon dictionary not built (offline?). Later run: $LEX_VENV/bin/python $LEX_PY build"
+fi
 
 if [ "$INSTALL_ZSH" = true ] && command -v zsh &> /dev/null; then
     if [ ! -d "$HOME/.oh-my-zsh" ]; then
