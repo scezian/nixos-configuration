@@ -163,7 +163,7 @@ ARCH_PKGS=(
     "wmctrl" "power-profiles-daemon" "easyeffects" "swayosd-git" "nautilus" "lsp-plugins" "hyprpolkitagent"
     "qt5-wayland" "qt5-quickcontrols" "qt5-quickcontrols2" "qt5-graphicaleffects" "qt6-wayland"
     "qt5ct" "qt6ct" "gpu-screen-recorder" "adw-gtk-theme"
-    "tesseract" "tesseract-data-eng" "tesseract-data-chi_sim" "tesseract-data-chi_tra" "tesseract-data-jpn" "tesseract-data-kor" "translate-shell"
+    "tesseract" "tesseract-data-eng" "tesseract-data-chi_sim" "tesseract-data-chi_tra" "tesseract-data-jpn" "tesseract-data-kor" "tesseract-data-rus" "tesseract-data-ara" "tesseract-data-hin" "tesseract-data-tha" "tesseract-data-vie" "tesseract-data-spa" "tesseract-data-fra" "tesseract-data-deu" "tesseract-data-por" "tesseract-data-ita" "tesseract-data-tur" "tesseract-data-swa" "translate-shell"
     "spotify-launcher" "rambox-bin" "qbittorrent"
 )
 

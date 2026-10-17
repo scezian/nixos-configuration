@@ -20,6 +20,8 @@ Item {
     readonly property color statusColor: hub.status === "loading" ? cMauve : hub.status === "done" ? cGreen : hub.status === "error" ? cRed : cSub0
 
     property real pulse: 1.0
+    property bool moreLangs: false
+    readonly property var chipModel: (moreLangs ? hub.langChips : hub.langChips.slice(0, 8)).concat([{ label: moreLangs ? "Less" : "More\u2026", langs: "__more" }])
     SequentialAnimation on pulse {
         running: page.hub.status === "loading"; loops: Animation.Infinite
         NumberAnimation { to: 0.3; duration: 700; easing.type: Easing.InOutSine }
@@ -162,7 +164,7 @@ Item {
                             text: "RE-SCAN AS"; font.family: "JetBrains Mono"; font.pixelSize: page.s(9); font.letterSpacing: 1.5; color: page.cSub0
                         }
                         Repeater {
-                            model: hub.langChips
+                            model: page.chipModel
                             delegate: Rectangle {
                                 id: chip
                                 required property var modelData
@@ -180,7 +182,7 @@ Item {
                                     font.weight: chip.active ? Font.Bold : Font.Normal
                                     color: chip.active ? page.cMauve : page.cSub0
                                 }
-                                MouseArea { id: chipMa; anchors.fill: parent; hoverEnabled: true; onClicked: hub.rescan(chip.modelData.langs) }
+                                MouseArea { id: chipMa; anchors.fill: parent; hoverEnabled: true; onClicked: { if (chip.modelData.langs === "__more") page.moreLangs = !page.moreLangs; else hub.rescan(chip.modelData.langs); } }
                             }
                         }
                     }

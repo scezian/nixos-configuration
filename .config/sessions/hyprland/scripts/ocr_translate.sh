@@ -80,13 +80,35 @@ def run(lang):
     return lang, text, score
 
 
+CYR = re.compile("[\u0400-\u04ff]")
+ARA = re.compile("[\u0600-\u06ff]")
+HAN = re.compile("[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+
+
 def bonus(lang, text):
-    b = PRIO.get(lang.split("+")[0], 0.0)
-    if lang.startswith("jpn") and KANA.search(text):
-        b += 8
-    if lang.startswith("kor") and HANGUL.search(text):
-        b += 8
-    if lang.startswith("chi") and (KANA.search(text) or HANGUL.search(text)):
+    base = lang.split("+")[0]
+    b = PRIO.get(base, 0.0)
+    kana, hangul, han = bool(KANA.search(text)), bool(HANGUL.search(text)), bool(HAN.search(text))
+    cyr, ara = bool(CYR.search(text)), bool(ARA.search(text))
+    cjk = kana or hangul or han
+    if base == "jpn":
+        b += 8 if kana else 0
+        if not cjk:
+            b -= 8
+    elif base == "kor":
+        b += 8 if hangul else -8
+    elif base.startswith("chi"):
+        if kana or hangul:
+            b -= 10
+        if not han:
+            b -= 8
+    elif base == "rus":
+        if not cyr:
+            b -= 8
+    elif base == "ara":
+        if not ara:
+            b -= 8
+    elif cjk or cyr or ara:      # Latin-script group read non-Latin text: garbage
         b -= 10
     return b
 
@@ -121,7 +143,7 @@ do_ocr() {
     magick "$IMG" -resize 300% -colorspace Gray -normalize "$proc"
     mean=$(magick "$proc" -format '%[fx:mean]' info:)
     awk "BEGIN{exit !($mean < 0.5)}" && magick "$proc" -negate "$proc"
-    if [ "$LANG_EXPLICIT" = 1 ]; then cands="$LANGS"; else cands="chi_sim+eng,chi_tra+eng,jpn+eng,kor+eng"; fi
+    if [ "$LANG_EXPLICIT" = 1 ]; then cands="$LANGS"; else cands="${OCR_AUTO:-chi_sim+eng,chi_tra+eng,jpn+eng,kor+eng,rus+eng,ara+eng,eng+spa+fra+deu+por+ita}"; fi
     out=$(ocr_pick "$proc" "$cands")
     rm -f "$proc"
     { IFS= read -r OCR_LANG; IFS= read -r OCR_CONF; IFS= read -r OCR_TEXT; } <<< "$out"

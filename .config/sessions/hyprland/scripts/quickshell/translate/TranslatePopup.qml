@@ -52,10 +52,23 @@ Item {
 
     readonly property var langChips: [
         { label: "Auto-detect", langs: "auto" },
-        { label: "Chinese simplified",   langs: "chi_sim+eng" },
-        { label: "Chinese traditional",   langs: "chi_tra+eng" },
+        { label: "Chinese simplified", langs: "chi_sim+eng" },
+        { label: "Chinese traditional", langs: "chi_tra+eng" },
         { label: "Japanese", langs: "jpn+eng" },
-        { label: "Korean", langs: "kor+eng" }
+        { label: "Korean", langs: "kor+eng" },
+        { label: "Russian", langs: "rus+eng" },
+        { label: "Arabic", langs: "ara+eng" },
+        { label: "European", langs: "eng+spa+fra+deu+por+ita" },
+        { label: "Spanish", langs: "spa+eng" },
+        { label: "French", langs: "fra+eng" },
+        { label: "German", langs: "deu+eng" },
+        { label: "Portuguese", langs: "por+eng" },
+        { label: "Italian", langs: "ita+eng" },
+        { label: "Turkish", langs: "tur+eng" },
+        { label: "Swahili", langs: "swa+eng" },
+        { label: "Hindi", langs: "hin+eng" },
+        { label: "Thai", langs: "tha+eng" },
+        { label: "Vietnamese", langs: "vie+eng" }
     ]
 
     function requestClose() { closeSequence.start(); }
