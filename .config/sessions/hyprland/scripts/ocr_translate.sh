@@ -6,6 +6,7 @@ MODE=ocr; TARGET=en; TEXT_IN=""
 LANGS="${OCR_LANGS:-chi_sim+eng}"; LANG_EXPLICIT=0
 [ -n "${OCR_LANGS:-}" ] && LANG_EXPLICIT=1
 CONF=0
+IMGFLAG=-1; OPENED=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --empty) MODE=empty; shift ;;
@@ -26,13 +27,17 @@ IPC="/tmp/qs_widget_state"
 mkdir -p "$HOME/.cache"
 
 write_state() { # status original translated [phonetic]
-    python3 -c 'import json,sys,time; a=sys.argv; print(json.dumps({"status":a[1],"original":a[2],"translated":a[3],"phonetic":a[4],"langs":a[5],"conf":int(float(a[6])),"ts":int(time.time()*1000)}, ensure_ascii=False))' \
-        "$1" "$2" "$3" "${4:-}" "$LANGS" "${CONF:-0}" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+    python3 -c 'import json,sys,time; a=sys.argv; print(json.dumps({"status":a[1],"original":a[2],"translated":a[3],"phonetic":a[4],"langs":a[5],"conf":int(float(a[6])),"img":int(a[7]),"ts":int(time.time()*1000)}, ensure_ascii=False))' \
+        "$1" "$2" "$3" "${4:-}" "$LANGS" "${CONF:-0}" "${IMGFLAG:--1}" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
 }
 
-open_popup() { case "$MODE" in ocr|empty) bash "$QS" open translate ;; esac; }
+open_popup() {
+    [ "$OPENED" = 1 ] && return 0
+    case "$MODE" in ocr|empty) bash "$QS" open translate; OPENED=1 ;; esac
+}
 
 if [ "$MODE" = empty ]; then
+    IMGFLAG=0
     write_state idle "" ""
     open_popup
     exit 0
@@ -172,11 +177,13 @@ case "$MODE" in
         echo "close" > "$IPC"; sleep 0.5      # make sure the hub isn't in the screenshot
         region=$(slurp) || exit 0
         grim -g "$region" "$IMG" || exit 1
+        IMGFLAG=1; write_state scanning "" ""; open_popup
         do_ocr; text="$OCR_TEXT"; LANGS="$OCR_LANG"; CONF="$OCR_CONF" ;;
     redo)
         if [ ! -f "$IMG" ]; then
             write_state error "" "No captured image yet. Scan something first."; exit 1
         fi
+        IMGFLAG=1; write_state scanning "" ""
         do_ocr; text="$OCR_TEXT"; LANGS="$OCR_LANG"; CONF="$OCR_CONF" ;;
     text)
         text=$(printf '%s' "$TEXT_IN" | tr '\n' ' ' | sed 's/^ *//; s/ *$//') ;;

@@ -33,17 +33,28 @@ Item {
 
     // ---- shared state (pages read these) ----
     property int page: 0                 // 0 = Translate, 1 = Dictionary
-    property string status: "idle"       // idle | loading | done | error
+    property string status: "idle"       // idle | scanning | loading | done | error
     property string original: ""
     property string translated: ""
     property string phonetic: ""
     property string langs: "chi_sim+eng"
     property int conf: 0
+    property bool hasImg: false
+    property real imgStamp: 0
     property string lastRaw: ""
     property real actionTs: 0
     property string toast: ""
     property real introBase: 0.0
     property real introContent: 0.0
+
+    // ---- reactive visuals ----
+    readonly property bool busy: status === "scanning" || status === "loading"
+    property real energy: busy ? 1.0 : 0.0
+    Behavior on energy { NumberAnimation { duration: 700; easing.type: Easing.InOutSine } }
+    property real px: card.nx
+    property real py: card.ny
+    Behavior on px { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+    Behavior on py { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
 
     readonly property string home: Quickshell.env("HOME")
     readonly property string stateFile: home + "/.cache/qs_translate.json"
@@ -96,8 +107,10 @@ Item {
         Quickshell.execDetached(["bash", root.script, "--text", t, "--lang", root.langs]);
         root.forceActiveFocus();
     }
+    function openWord(w) { root.page = 1; dPage.resultsMode = false; dPage.selectWord(w); }
 
     onPageChanged: root.forceActiveFocus()
+    onStatusChanged: { if (status === "error") flashAnim.restart(); }
 
     Keys.onEscapePressed: { root.requestClose(); event.accepted = true; }
     Keys.onPressed: (event) => {
@@ -114,7 +127,7 @@ Item {
 
     Timer { id: toastTimer; interval: 1600; onTriggered: root.toast = "" }
 
-    // ---- state file polling (the script rewrites it: loading -> done) ----
+    // ---- state file polling ----
     Process {
         id: reader
         command: ["cat", root.stateFile]
@@ -133,6 +146,8 @@ Item {
                     root.phonetic = d.phonetic || "";
                     root.langs = d.langs || root.langs;
                     root.conf = d.conf || 0;
+                    if (d.img !== undefined && d.img >= 0) root.hasImg = (d.img === 1);
+                    root.imgStamp = d.ts || 0;
                 } catch (e) {}
             }
         }
@@ -158,6 +173,11 @@ Item {
         NumberAnimation { target: root; property: "introContent"; to: 0.0; duration: 150; easing.type: Easing.InExpo }
         NumberAnimation { target: root; property: "introBase"; to: 0.0; duration: 200; easing.type: Easing.InQuart }
         ScriptAction { script: Quickshell.execDetached(["bash", root.mgr, "close"]) }
+    }
+    SequentialAnimation {
+        id: flashAnim
+        NumberAnimation { target: errFlash; property: "opacity"; to: 0.16; duration: 90 }
+        NumberAnimation { target: errFlash; property: "opacity"; to: 0.0; duration: 650; easing.type: Easing.OutCubic }
     }
 
     // four-corner scan icon, drawn so there is no icon-font dependency
@@ -190,12 +210,21 @@ Item {
             border.width: 1
             clip: true
 
-            // ---- animated ambient orbs (seamless loop) ----
+            HoverHandler { id: hover }
+            readonly property real nx: hover.hovered ? Math.max(-1, Math.min(1, (hover.point.position.x / card.width - 0.5) * 2)) : 0
+            readonly property real ny: hover.hovered ? Math.max(-1, Math.min(1, (hover.point.position.y / card.height - 0.5) * 2)) : 0
+
+            // ---- animated ambient orbs: speed + glow follow root.energy, depth follows the cursor ----
             Item {
                 id: orbLayer
-                anchors.fill: parent
+                width: parent.width; height: parent.height
+                x: -root.px * root.s(26)
+                y: -root.py * root.s(18)
                 property real time: 0
-                NumberAnimation on time { from: 0; to: Math.PI * 2; duration: 18000; loops: Animation.Infinite; running: true }
+                Timer {
+                    interval: 33; running: true; repeat: true
+                    onTriggered: orbLayer.time += 0.033 * (Math.PI * 2 / 18) * (1.0 + 3.5 * root.energy)
+                }
                 Repeater {
                     model: 3
                     delegate: Item {
@@ -207,18 +236,34 @@ Item {
                         width: sz; height: sz
                         x: orbLayer.width  * [0.9, 0.12, 0.6][index] - sz / 2 + Math.sin(t * [1, 1, 2][index]) * root.s(90)
                         y: orbLayer.height * [0.05, 0.95, 0.5][index] - sz / 2 + Math.cos(t * [2, 1, 1][index]) * root.s(60)
-                        opacity: 0.65 + 0.35 * Math.sin(t + index * 2.1)
-                        Rectangle { anchors.fill: parent; radius: width / 2; color: orb.oc; opacity: 0.05 }
-                        Rectangle { anchors.centerIn: parent; width: parent.width * 0.6; height: width; radius: width / 2; color: orb.oc; opacity: 0.07 }
+                        opacity: Math.min(1.0, (0.65 + 0.35 * Math.sin(t + index * 2.1)) * (1.0 + 0.8 * root.energy))
+                        Rectangle { anchors.fill: parent; radius: width / 2; color: orb.oc; opacity: 0.05 + 0.05 * root.energy }
+                        Rectangle { anchors.centerIn: parent; width: parent.width * 0.6; height: width; radius: width / 2; color: orb.oc; opacity: 0.07 + 0.06 * root.energy }
                     }
                 }
+            }
+
+            // ---- cursor spotlight ----
+            Rectangle {
+                width: root.s(460); height: width; radius: width / 2
+                x: hover.point.position.x - width / 2; y: hover.point.position.y - height / 2
+                color: root.mauve
+                opacity: hover.hovered ? 0.035 : 0.0
+                Behavior on opacity { NumberAnimation { duration: 400 } }
+            }
+            Rectangle {
+                width: root.s(220); height: width; radius: width / 2
+                x: hover.point.position.x - width / 2; y: hover.point.position.y - height / 2
+                color: root.pink
+                opacity: hover.hovered ? 0.045 : 0.0
+                Behavior on opacity { NumberAnimation { duration: 400 } }
             }
 
             // ================= SIDEBAR =================
             Rectangle {
                 id: side
-                x: root.s(16) - (1.0 - root.introContent) * root.s(30)
-                y: root.s(16)
+                x: root.s(16) - (1.0 - root.introContent) * root.s(30) - root.px * root.s(3)
+                y: root.s(16) - root.py * root.s(2)
                 width: root.s(236)
                 height: parent.height - root.s(32)
                 radius: root.s(14)
@@ -227,7 +272,6 @@ Item {
                 border.width: 1
                 opacity: root.introContent
 
-                // brand
                 RowLayout {
                     x: root.s(18); y: root.s(20)
                     width: parent.width - root.s(36)
@@ -256,7 +300,6 @@ Item {
 
                 Rectangle { x: root.s(16); y: root.s(86); width: parent.width - root.s(32); height: 1; color: root.surface0 }
 
-                // nav
                 Item {
                     id: nav
                     x: root.s(12); y: root.s(104)
@@ -340,7 +383,6 @@ Item {
                     }
                 }
 
-                // scan button
                 Rectangle {
                     id: scanBtn
                     anchors.left: parent.left; anchors.right: parent.right
@@ -387,7 +429,10 @@ Item {
                 anchors.right: parent.right; anchors.rightMargin: root.s(28)
                 anchors.bottom: parent.bottom; anchors.bottomMargin: root.s(22)
                 opacity: root.introContent
-                transform: Translate { y: (1.0 - root.introContent) * root.s(14) }
+                transform: Translate {
+                    x: root.px * root.s(5)
+                    y: (1.0 - root.introContent) * root.s(14) + root.py * root.s(4)
+                }
 
                 TranslatePage {
                     id: tPage
@@ -415,7 +460,16 @@ Item {
                 }
             }
 
-            // close button
+            // error flash (does not take input)
+            Rectangle {
+                id: errFlash
+                anchors.fill: parent
+                radius: card.radius
+                color: root.red
+                opacity: 0
+                z: 5
+            }
+
             Rectangle {
                 anchors.top: parent.top; anchors.right: parent.right
                 anchors.topMargin: root.s(20); anchors.rightMargin: root.s(22)
@@ -433,7 +487,6 @@ Item {
                 MouseArea { id: xMa; anchors.fill: parent; hoverEnabled: true; onClicked: root.requestClose() }
             }
 
-            // toast
             Rectangle {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottom: parent.bottom; anchors.bottomMargin: root.s(30)
