@@ -121,15 +121,15 @@ handle_wallpaper_prep() {
 
     ) </dev/null >/dev/null 2>&1 &
 
-    # swww/mpvpaper detection (unchanged, fast)
+    # awww/mpvpaper detection (unchanged, fast)
     TARGET_THUMB=""
     CURRENT_SRC=""
     if pgrep -a "mpvpaper" > /dev/null; then
         CURRENT_SRC=$(pgrep -a mpvpaper | grep -o "$SRC_DIR/[^' ]*" | head -n1)
         CURRENT_SRC=$(basename "$CURRENT_SRC")
     fi
-    if [ -z "$CURRENT_SRC" ] && command -v swww >/dev/null; then
-        CURRENT_SRC=$(swww query 2>/dev/null | grep -o "$SRC_DIR/[^ ]*" | head -n1)
+    if [ -z "$CURRENT_SRC" ] && command -v awww >/dev/null; then
+        CURRENT_SRC=$(awww query 2>/dev/null | grep -o "$SRC_DIR/[^ ]*" | head -n1)
         CURRENT_SRC=$(basename "$CURRENT_SRC")
     fi
     if [ -n "$CURRENT_SRC" ]; then
@@ -162,6 +162,12 @@ fi
 
 if ! pgrep -f "quickshell.*TopBar\.qml" >/dev/null; then
     quickshell -p "$BAR_QML_PATH" >/dev/null 2>&1 &
+    disown
+fi
+
+TOAST_QML_PATH="$HOME/.config/hypr/scripts/quickshell/ClipToast.qml"
+if [ -f "$TOAST_QML_PATH" ] && ! pgrep -f "quickshell.*ClipToast\.qml" >/dev/null; then
+    quickshell -p "$TOAST_QML_PATH" >/dev/null 2>&1 &
     disown
 fi
 

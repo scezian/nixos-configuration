@@ -49,3 +49,5 @@ hl.window_rule({
 -- })
 
 hl.layer_rule({ name = "translate-blur", match = { namespace = "^(qs-master)$" }, blur = true, ignore_alpha = 0.3 })
+
+hl.layer_rule({ name = "cliptoast-blur", match = { namespace = "^(qs-cliptoast)$" }, blur = true, ignore_alpha = 0.3 })
