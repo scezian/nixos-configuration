@@ -3,6 +3,8 @@
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 hl.on("hyprland.start", function()
+    hl.exec_cmd("python3 ~/.config/hypr/scripts/power_daemon.py")
+    hl.exec_cmd("systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP DISPLAY && systemctl --user start fancontrol-gui.service")
     hl.exec_cmd("awww-daemon")
     -- [hyprpanel] hl.exec_cmd("hypridle")
     hl.exec_cmd("playerctld")

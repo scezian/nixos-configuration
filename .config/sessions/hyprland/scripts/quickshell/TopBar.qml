@@ -656,12 +656,15 @@ Variants {
                             Behavior on opacity { NumberAnimation { duration: 300 } }
                             Behavior on color { ColorAnimation { duration: 200 } }
                             
-                            Text {
+                            Image {
                                 anchors.centerIn: parent
-                                text: "󰋗"
-                                font.family: "Iosevka Nerd Font"; font.pixelSize: barWindow.s(22)
-                                color: parent.isHovered ? mocha.teal : mocha.text
-                                Behavior on color { ColorAnimation { duration: 200 } }
+                                source: "file://" + Quickshell.env("HOME") + "/.config/hypr/scripts/quickshell/power/hyprpanel.png"
+                                sourceSize.width: barWindow.s(52); sourceSize.height: barWindow.s(52)
+                                width: barWindow.s(26); height: barWindow.s(26)
+                                fillMode: Image.PreserveAspectFit
+                                smooth: true; mipmap: true
+                                opacity: parent.isHovered ? 1.0 : 0.88
+                                Behavior on opacity { NumberAnimation { duration: 200 } }
                                 scale: parent.isHovered ? 1.15 : 1.0
                                 Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutExpo } }
                             }
@@ -669,7 +672,7 @@ Variants {
                                 id: helpMouse
                                 anchors.fill: parent
                                 hoverEnabled: true
-                                onClicked: Quickshell.execDetached(["bash", "-c", "~/.config/hypr/scripts/qs_manager.sh toggle guide"])
+                                onClicked: Quickshell.execDetached(["bash", "-c", "~/.config/hypr/scripts/qs_manager.sh toggle power"])
                             }
                         }
 
