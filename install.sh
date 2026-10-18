@@ -152,7 +152,7 @@ if [ -z "$TELEMETRY_ID" ]; then
 fi
 
 ARCH_PKGS=(
-    "hyprland" "hypridle" "kitty" "cava" "zbar" "pavucontrol" "fprintd" "alsa-utils" "awww" "networkmanager-dmenu-git"
+    "hyprland" "hypridle" "hyprsunset" "kitty" "cava" "zbar" "pavucontrol" "fprintd" "alsa-utils" "awww" "networkmanager-dmenu-git"
     "wl-clipboard" "fd" "qt6-multimedia" "qt6-5compat" "ripgrep"
     "cliphist" "jq" "socat" "inotify-tools" "pamixer" "brightnessctl" "acpi" "iw"
     "bluez" "bluez-utils" "libnotify" "networkmanager" "lm_sensors" "bc" 
