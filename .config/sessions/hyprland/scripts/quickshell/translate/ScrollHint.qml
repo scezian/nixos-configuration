@@ -22,7 +22,7 @@ Item {
         width: sh.hub.s(16)
 
         readonly property bool hot: stripMa.containsMouse || stripMa.pressed
-        readonly property real barW: hot ? sh.hub.s(8) : sh.hub.s(4)
+        property real barW: hot ? sh.hub.s(8) : sh.hub.s(4)
         Behavior on barW { NumberAnimation { duration: 140 } }
 
         Rectangle {
