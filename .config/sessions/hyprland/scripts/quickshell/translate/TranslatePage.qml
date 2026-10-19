@@ -41,6 +41,7 @@ Item {
         interval: 55; repeat: true; running: page.typing
         onTriggered: {
             page.revealWords += 1;
+            Qt.callLater(function () { dstFlick.contentY = Math.max(0, dstFlick.contentHeight - dstFlick.height); });
             if (page.revealWords >= page.transWords.length) page.typing = false;
         }
     }
@@ -49,6 +50,7 @@ Item {
         interval: 40
         onTriggered: {
             page.revealWords = 0;
+            dstFlick.contentY = 0;
             page.typing = page.transWords.length > 0;
             stampAnim.restart();
             rippleAnim.restart();
@@ -248,6 +250,7 @@ Item {
                         id: srcArea
                         Layout.fillWidth: true; Layout.fillHeight: true
 
+                        ScrollHint { flick: srcFlick; hub: page.hub }
                         Flickable {
                             id: srcFlick
                             visible: page.viewMode === 0
@@ -256,7 +259,7 @@ Item {
                             clip: true; boundsBehavior: Flickable.StopAtBounds
                             TextEdit {
                                 id: srcEdit
-                                width: srcFlick.width
+                                width: srcFlick.width - page.s(16)
                                 wrapMode: TextEdit.Wrap
                                 selectByMouse: true
                                 readOnly: page.busy
@@ -459,15 +462,16 @@ Item {
                             font.family: "JetBrains Mono"; font.pixelSize: page.s(18); color: page.cSub0
                             opacity: hub.status === "scanning" ? page.pulse * 0.8 : 0.6
                         }
+                        ScrollHint { flick: dstFlick; hub: page.hub }
                         Flickable {
                             id: dstFlick
                             visible: hub.status === "done" || hub.status === "error"
                             anchors.fill: parent
-                            contentHeight: dstText.paintedHeight
+                            contentHeight: dstText.paintedHeight + page.s(72)
                             clip: true; boundsBehavior: Flickable.StopAtBounds
                             TextEdit {
                                 id: dstText
-                                width: dstFlick.width
+                                width: dstFlick.width - page.s(16)
                                 text: hub.status === "error" ? hub.translated : page.shownText
                                 readOnly: true; selectByMouse: true
                                 wrapMode: TextEdit.Wrap

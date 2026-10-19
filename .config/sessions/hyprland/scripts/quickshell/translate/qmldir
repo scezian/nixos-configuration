@@ -2,3 +2,4 @@ TranslatePage TranslatePage.qml
 DictionaryPage DictionaryPage.qml
 PillBtn PillBtn.qml
 LookupProc LookupProc.qml
+ScrollHint ScrollHint.qml
