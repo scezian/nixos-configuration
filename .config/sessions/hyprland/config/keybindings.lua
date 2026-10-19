@@ -125,3 +125,4 @@ hl.bind(mainMod .. " + T", hl.dsp.exec_cmd("bash ~/.config/hypr/scripts/qs_manag
 hl.bind(mainMod .. " + SUPER + T", hl.dsp.exec_cmd("~/.config/hypr/scripts/ocr_translate.sh --empty"))
 
 hl.bind(mainMod .. " + ALT + T", hl.dsp.exec_cmd("~/.config/hypr/scripts/ocr_translate.sh --empty"))
+hl.bind(mainMod .. " + SHIFT + G", hl.dsp.exec_cmd("bash ~/.config/hypr/scripts/qs_manager.sh toggle aeroget"))
