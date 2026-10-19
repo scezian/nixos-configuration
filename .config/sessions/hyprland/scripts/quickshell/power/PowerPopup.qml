@@ -110,6 +110,8 @@ Item {
         battery_alerts: true, battery_warn: 20, battery_crit: 10 })
     property var stat: ({ running: false })
     property bool daemonUp: false
+    property int downCount: 0
+    property bool autoStarted: false
     property real pendingUntil: 0
     property real introBase: 0.0
     property real introContent: 0.0
@@ -167,6 +169,14 @@ Item {
                     let st = (parts.length > 1 && parts[1].trim() !== "") ? JSON.parse(parts[1]) : { running: false };
                     root.stat = st;
                     root.daemonUp = st.running === true && (Date.now() - (st.ts || 0)) < 25000;
+                    if (root.daemonUp) { root.downCount = 0; }
+                    else {
+                        root.downCount += 1;
+                        if (root.downCount >= 3 && !root.autoStarted) {
+                            root.autoStarted = true;
+                            Quickshell.execDetached(["bash", "-c", "setsid -f python3 \"$HOME/.config/hypr/scripts/power_daemon.py\""]);
+                        }
+                    }
                 } catch (e) { root.daemonUp = false; }
             }
         }
@@ -279,7 +289,7 @@ Item {
                     Btn {
                         visible: !root.daemonUp
                         hub: root; label: "Start service"; accent: root.green
-                        onClicked: Quickshell.execDetached(["bash", "-c", "pgrep -f power_daemon.py >/dev/null || setsid -f python3 \"$HOME/.config/hypr/scripts/power_daemon.py\""])
+                        onClicked: Quickshell.execDetached(["bash", "-c", "setsid -f python3 \"$HOME/.config/hypr/scripts/power_daemon.py\""])
                     }
                 }
 

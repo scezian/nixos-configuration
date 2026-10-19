@@ -171,6 +171,11 @@ if [ -f "$TOAST_QML_PATH" ] && ! pgrep -f "quickshell.*ClipToast\.qml" >/dev/nul
     disown
 fi
 
+# Keep the Power & Display service alive (night light, idle, battery alerts)
+if [ -f "$HOME/.config/hypr/scripts/power_daemon.py" ] && ! pgrep -f "python3.*power_daemon\.py" >/dev/null; then
+    setsid -f python3 "$HOME/.config/hypr/scripts/power_daemon.py" >/dev/null 2>&1
+fi
+
 # -----------------------------------------------------------------------------
 # IPC ROUTING
 # -----------------------------------------------------------------------------

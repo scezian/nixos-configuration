@@ -8,7 +8,7 @@
   power_daemon.py alert-test  send both battery notifications
 
 Settings: ~/.config/hyprpanel/config.json     Status: ~/.cache/hyprpanel_status.json"""
-import fcntl, glob, json, os, signal, subprocess, sys, time
+import fcntl, glob, json, os, signal, subprocess, sys, time, traceback
 from datetime import datetime
 
 HOME = os.path.expanduser("~")
@@ -31,6 +31,25 @@ DEFAULTS = {
 LIMITS = {"sunset_temp": (1000, 10000), "sunset_on_hour": (0, 23), "sunset_off_hour": (0, 23),
           "lock_timeout": (1, 240), "suspend_timeout": (1, 480), "battery_warn": (1, 99), "battery_crit": (1, 99)}
 DEVNULL = subprocess.DEVNULL
+LOG = HOME + "/.cache/hyprpanel_daemon.log"
+
+
+def elog(msg):
+    try:
+        if os.path.exists(LOG) and os.path.getsize(LOG) > 200000:
+            os.replace(LOG, LOG + ".1")
+        with open(LOG, "a") as f:
+            f.write("%s %s\n" % (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), msg))
+    except OSError:
+        pass
+
+
+def _die_with_parent():
+    try:
+        import ctypes
+        ctypes.CDLL("libc.so.6", use_errno=True).prctl(1, signal.SIGTERM)   # PR_SET_PDEATHSIG
+    except Exception:
+        pass
 
 
 def load():
@@ -145,7 +164,7 @@ class Managed:
         self.stop()
         if argv:
             self.argv = argv
-        self.p = subprocess.Popen(self.argv, stdout=DEVNULL, stderr=DEVNULL, start_new_session=True)
+        self.p = subprocess.Popen(self.argv, stdout=DEVNULL, stderr=DEVNULL, start_new_session=True, preexec_fn=_die_with_parent)
         self.started = time.time()
 
     def stop(self):
@@ -168,6 +187,7 @@ def run_daemon(verbose):
         return 0
 
     def log(*a):
+        elog(" ".join(str(x) for x in a))
         if verbose:
             print("[power]", *a, flush=True)
 
@@ -288,7 +308,13 @@ def main():
     a = sys.argv[1:]
     cmd = a[0] if a else "run"
     if cmd == "run":
-        return run_daemon(sys.stdout.isatty())
+        verbose = sys.stdout.isatty()
+        while True:
+            try:
+                return run_daemon(verbose)
+            except Exception:
+                elog("CRASH, restarting:\n" + traceback.format_exc())
+                time.sleep(3)
     if cmd == "set" and len(a) == 3:
         if a[1] not in DEFAULTS:
             print("unknown key:", a[1])
