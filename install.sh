@@ -165,6 +165,7 @@ ARCH_PKGS=(
     "qt5ct" "qt6ct" "gpu-screen-recorder" "adw-gtk-theme"
     "tesseract" "tesseract-data-eng" "tesseract-data-chi_sim" "tesseract-data-chi_tra" "tesseract-data-jpn" "tesseract-data-kor" "tesseract-data-rus" "tesseract-data-ara" "tesseract-data-hin" "tesseract-data-tha" "tesseract-data-vie" "tesseract-data-spa" "tesseract-data-fra" "tesseract-data-deu" "tesseract-data-por" "tesseract-data-ita" "tesseract-data-tur" "tesseract-data-swa" "translate-shell"
     "spotify-launcher" "rambox-bin" "qbittorrent"
+    "python-pykeepass" "words" "keepassxc"
 )
 
 PKGS=("${ARCH_PKGS[@]}")
@@ -1265,6 +1266,18 @@ for folder in "${CONFIG_FOLDERS[@]}"; do
         printf "  -> Copied %-31s ${C_GREEN}[ OK ]${RESET}\n" "$folder"
     fi
 done
+
+# --- 4.4 Vault config check (never overwrites an existing file) ---
+VAULT_CONF_DIR="$HOME/.config/vault"
+mkdir -p "$VAULT_CONF_DIR" "$HOME/.local/share/vault"
+chmod 700 "$VAULT_CONF_DIR" "$HOME/.local/share/vault"
+if [ ! -f "$VAULT_CONF_DIR/vault.env" ]; then
+    printf 'SUPABASE_URL=\nSUPABASE_ANON_KEY=\nVAULT_BUCKET=vault\n# VAULT_BACKUP_DIR=/run/media/USER/USB/vault\n' > "$VAULT_CONF_DIR/vault.env"
+    chmod 600 "$VAULT_CONF_DIR/vault.env"
+    echo -e "  -> ${C_YELLOW}Vault: fill in SUPABASE_URL and SUPABASE_ANON_KEY in $VAULT_CONF_DIR/vault.env, then press SUPER+P and pick Restore from cloud${RESET}"
+else
+    echo -e "  -> Vault config present ${C_GREEN}[ OK ]${RESET}"
+fi
 
 # --- 4.5 Bake Hardware Variables into Template ---
 # By doing this now, we eliminate the need for the hacky hardware_env.conf file
