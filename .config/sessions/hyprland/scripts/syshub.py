@@ -279,6 +279,164 @@ def do_fix(fid):
     write_json(FIXST, {"id": fid, "status": "done" if ok else "error", "ts": time.time()})
 
 
+import urllib.request, urllib.parse
+import xml.etree.ElementTree as ET
+
+NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9@._+-]*$")
+HOT = ("linux", "systemd", "glibc", "pacman", "mesa", "nvidia", "grub", "mkinitcpio", "openssl")
+
+
+def http_get(url, timeout=10):
+    req = urllib.request.Request(url, headers={"User-Agent": "syshub/1.0"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read().decode("utf-8", "replace")
+
+
+def cmd_news():
+    try:
+        root = ET.fromstring(http_get("https://archlinux.org/feeds/news/"))
+        items = []
+        for it in root.iter("item"):
+            items.append({"title": it.findtext("title", ""), "date": (it.findtext("pubDate", "") or "")[:16],
+                          "link": it.findtext("link", "")})
+            if len(items) >= 5:
+                break
+        return items
+    except Exception:
+        return []
+
+
+def cmd_updates():
+    out = []
+    rc, o, _ = run(["checkupdates"], timeout=90)
+    srcs = [("repo", o if rc == 0 else "")]
+    if shutil.which("yay"):
+        rc2, o2, _ = run(["yay", "-Qua"], timeout=60)
+        srcs.append(("aur", o2 if rc2 == 0 else ""))
+    for src, txt in srcs:
+        for l in txt.splitlines():
+            q = l.split()
+            if len(q) >= 4:
+                out.append({"name": q[0], "old": q[1], "new": q[3], "src": src,
+                            "hot": q[0].startswith(HOT)})
+    return out
+
+
+def installed_set():
+    rc, o, _ = run(["pacman", "-Qq"])
+    return set(o.split()) if rc == 0 else set()
+
+
+def cmd_search(q):
+    q = q.strip()
+    if len(q) < 2:
+        return []
+    inst = installed_set()
+    res = []
+    rx = re.sub(r"([.^$*+?()\[\]{}|\\])", r"\\\1", q)
+    rc, o, _ = run(["pacman", "-Ss", "--color", "never", rx], timeout=20)
+    if rc == 0:
+        cur = None
+        for l in o.splitlines():
+            if l.startswith(" ") and cur:
+                cur["desc"] = l.strip()
+                res.append(cur)
+                cur = None
+            elif "/" in l and l.split():
+                head = l.split()
+                repo, name = head[0].split("/", 1)
+                cur = {"name": name, "ver": head[1] if len(head) > 1 else "", "desc": "", "repo": repo,
+                       "votes": 0, "installed": name in inst, "ood": False}
+        res.sort(key=lambda r: (r["name"] != q, not r["name"].startswith(q), len(r["name"])))
+        res = res[:40]
+    try:
+        j = json.loads(http_get("https://aur.archlinux.org/rpc/v5/search/" + urllib.parse.quote(q) + "?by=name-desc"))
+        aur = sorted(j.get("results", []), key=lambda r: -r.get("NumVotes", 0))[:30]
+        have = {r["name"] for r in res}
+        for r in aur:
+            if r["Name"] in have:
+                continue
+            res.append({"name": r["Name"], "ver": r.get("Version", ""), "desc": r.get("Description") or "",
+                        "repo": "aur", "votes": r.get("NumVotes", 0), "installed": r["Name"] in inst,
+                        "ood": bool(r.get("OutOfDate"))})
+    except Exception:
+        pass
+    return res
+
+
+def cmd_installed():
+    rc, o, _ = run(["pacman", "-Qe"])
+    items = []
+    for l in o.splitlines():
+        q = l.split()
+        if len(q) >= 2:
+            items.append({"name": q[0], "ver": q[1]})
+    rc, o, _ = run(["pacman", "-Qm"])
+    foreign = {l.split()[0] for l in o.splitlines() if l.split()}
+    for it in items:
+        it["foreign"] = it["name"] in foreign
+    return items
+
+
+def cmd_pkgbuild(name):
+    if not NAME_RE.match(name):
+        return "invalid name"
+    try:
+        t = http_get("https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=" + urllib.parse.quote(name))
+    except Exception as e:
+        return "Failed to fetch PKGBUILD: %s" % e
+    return "\n".join(t.splitlines()[:140])
+
+
+def job_cmds(kind, args):
+    pk = [x for x in args if NAME_RE.match(x)]
+    if kind == "upgrade":
+        return [["pkexec", "pacman", "-Syu", "--noconfirm", "--noprogressbar"]]
+    if kind == "install" and pk:
+        return [["pkexec", "pacman", "-S", "--needed", "--noconfirm", "--noprogressbar"] + pk]
+    if kind == "remove" and pk:
+        return [["pkexec", "pacman", "-Rns", "--noconfirm"] + pk]
+    return []
+
+
+def spawn_job(kind, args):
+    if not job_cmds(kind, args):
+        print("bad job")
+        return 1
+    try:
+        st = json.load(open(FIXST))
+        if st.get("status") == "running" and time.time() - st.get("ts", 0) < 3600:
+            print("busy: another job is running")
+            return 1
+    except Exception:
+        pass
+    subprocess.Popen([sys.executable, os.path.abspath(__file__), "_job", kind] + args,
+                     start_new_session=True, stdin=subprocess.DEVNULL,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    print("started")
+    return 0
+
+
+def do_job(kind, args):
+    cmds = job_cmds(kind, args)
+    open(FIXLOG, "w").close()
+    write_json(FIXST, {"id": kind, "status": "running", "ts": time.time()})
+    ok = bool(cmds)
+    with open(FIXLOG, "a") as lg:
+        for c in cmds:
+            lg.write("$ " + " ".join(c) + "\n")
+            lg.flush()
+            try:
+                p = subprocess.run(c, stdout=lg, stderr=subprocess.STDOUT)
+                if p.returncode != 0:
+                    ok = False
+                    lg.write("[exit %d]\n" % p.returncode)
+            except Exception as e:
+                ok = False
+                lg.write("[error: %s]\n" % e)
+    write_json(FIXST, {"id": kind, "status": "done" if ok else "error", "ts": time.time()})
+
+
 def main():
     a = sys.argv[1:]
     if not a:
@@ -299,6 +457,20 @@ def main():
         print("started")
     elif cmd == "_fix" and len(a) > 1 and a[1] in FIXES:
         do_fix(a[1])
+    elif cmd == "news":
+        print(json.dumps(cmd_news()))
+    elif cmd == "updates":
+        print(json.dumps(cmd_updates()))
+    elif cmd == "search" and len(a) > 1:
+        print(json.dumps(cmd_search(" ".join(a[1:]))))
+    elif cmd == "installed":
+        print(json.dumps(cmd_installed()))
+    elif cmd == "pkgbuild" and len(a) > 1:
+        print(json.dumps({"text": cmd_pkgbuild(a[1])}))
+    elif cmd == "job" and len(a) > 1:
+        return spawn_job(a[1], a[2:])
+    elif cmd == "_job" and len(a) > 1:
+        do_job(a[1], a[2:])
     else:
         print("bad command")
         return 1

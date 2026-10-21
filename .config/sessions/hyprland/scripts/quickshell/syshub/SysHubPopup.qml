@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import "../"
+import "."
 
 Item {
     id: root
@@ -42,6 +43,8 @@ Item {
     property var checks: []
     property real shownScore: 0
     property real gx: 0
+    property int jobTick: 0
+    property var jobCmd: []
     property string fixId: ""
     property string fixStatus: ""
     property string fixTail: ""
@@ -80,6 +83,14 @@ Item {
         fixStart.running = true
         pollTimer.restart()
     }
+    function startJob(kind, args) {
+        if (fixStatus === "running") return
+        fixId = kind; fixStatus = "running"; fixTail = ""
+        fixStartTs = Date.now() / 1000
+        jobCmd = ["python3", script, "job", kind].concat(args)
+        jobStart.running = true
+        pollTimer.restart()
+    }
     function onFixPoll(txt) {
         var i = txt.indexOf("\n")
         if (i < 0) return
@@ -91,6 +102,7 @@ Item {
         if (fixStatus === "done" || fixStatus === "error") {
             pollTimer.stop()
             scanProc.running = true
+            root.jobTick++
             clearTimer.restart()
         }
     }
@@ -107,8 +119,22 @@ Item {
     }
     Process { id: fixStart; command: ["python3", root.script, "fix", root.fixId] }
     Process {
+        id: jobStart
+        command: root.jobCmd
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (text.indexOf("started") < 0) {
+                    root.fixStatus = "error"
+                    root.fixTail = text.trim() !== "" ? text.trim() : "job refused"
+                    pollTimer.stop()
+                    clearTimer.restart()
+                }
+            }
+        }
+    }
+    Process {
         id: fixPoll
-        command: ["sh", "-c", "cat '" + root.fixFile + "' 2>/dev/null; echo; tail -n 3 '" + root.fixLog + "' 2>/dev/null"]
+        command: ["sh", "-c", "cat '" + root.fixFile + "' 2>/dev/null; echo; tr '\\r' '\\n' < '" + root.fixLog + "' 2>/dev/null | tail -n 3"]
         stdout: StdioCollector { onStreamFinished: root.onFixPoll(text) }
     }
     Timer { id: pollTimer; interval: 800; repeat: true; onTriggered: if (!fixPoll.running) fixPoll.running = true }
@@ -129,6 +155,8 @@ Item {
             Quickshell.execDetached(["bash", root.home + "/.config/hypr/scripts/qs_manager.sh", "close"])
         else if (e.key === Qt.Key_1) root.page = 0
         else if (e.key === Qt.Key_2) root.page = 1
+        else if (e.key === Qt.Key_3) root.page = 2
+        else if (e.key === Qt.Key_4) root.page = 3
         else if (e.key === Qt.Key_R && !scanProc.running) scanProc.running = true
     }
 
@@ -260,8 +288,8 @@ Item {
                     model: [
                         { n: "01", t: "OVERVIEW", on: true },
                         { n: "02", t: "DIAGNOSTICS", on: true },
-                        { n: "03", t: "UPDATES", on: false },
-                        { n: "04", t: "INSTALL", on: false }
+                        { n: "03", t: "UPDATES", on: true },
+                        { n: "04", t: "INSTALL", on: true }
                     ]
                     delegate: Rectangle {
                         id: tab
@@ -340,7 +368,7 @@ Item {
                 id: header
                 width: parent.width; height: root.s(60)
                 Text {
-                    text: root.page === 0 ? "OVERVIEW" : "DIAGNOSTICS"
+                    text: ["OVERVIEW", "DIAGNOSTICS", "UPDATES", "INSTALL"][root.page]
                     color: root.text
                     font.family: root.mono; font.pixelSize: root.s(26); font.bold: true; font.letterSpacing: root.s(3)
                 }
@@ -566,7 +594,7 @@ Item {
                 ListView {
                     id: lv
                     anchors { left: parent.left; right: parent.right; top: parent.top
-                              bottom: fixConsole.visible ? fixConsole.top : parent.bottom; bottomMargin: root.s(10) }
+                              bottom: fixConsole.visible ? fixConsole.top : parent.bottom; bottomMargin: root.s(24) }
                     clip: true
                     spacing: root.s(10)
                     model: root.checks
@@ -674,9 +702,48 @@ Item {
                 }
             }
 
+            UpdatesPage {
+                hub: root
+                active: root.page === 2
+                anchors { left: parent.left; right: parent.right; top: header.bottom; bottom: parent.bottom
+                          topMargin: root.s(20); bottomMargin: jobConsole.visible ? jobConsole.height + root.s(34) : root.s(26) }
+                opacity: root.page === 2 ? 1 : 0
+                visible: opacity > 0.01
+                Behavior on opacity { NumberAnimation { duration: 220 } }
+            }
+            InstallPage {
+                hub: root
+                active: root.page === 3
+                anchors { left: parent.left; right: parent.right; top: header.bottom; bottom: parent.bottom
+                          topMargin: root.s(20); bottomMargin: jobConsole.visible ? jobConsole.height + root.s(34) : root.s(26) }
+                opacity: root.page === 3 ? 1 : 0
+                visible: opacity > 0.01
+                Behavior on opacity { NumberAnimation { duration: 220 } }
+            }
+            Rectangle {
+                id: jobConsole
+                visible: root.fixStatus !== "" && (root.page === 2 || root.page === 3)
+                anchors { left: parent.left; right: parent.right; bottom: parent.bottom; bottomMargin: root.s(24) }
+                height: root.s(86); radius: root.s(12)
+                color: Qt.alpha(root.base, 0.92)
+                border.width: 1
+                border.color: Qt.alpha(root.fixStatus === "error" ? root.red : root.green, 0.6)
+                Text {
+                    x: root.s(16); y: root.s(10)
+                    text: "JOB // " + root.fixId.toUpperCase() + " // " + root.fixStatus.toUpperCase()
+                    color: root.fixStatus === "error" ? root.red : root.green
+                    font.family: root.mono; font.pixelSize: root.s(10); font.bold: true; font.letterSpacing: root.s(2)
+                }
+                Text {
+                    x: root.s(16); y: root.s(28); width: parent.width - root.s(32)
+                    text: root.fixTail; color: root.subtext1; elide: Text.ElideRight; maximumLineCount: 3
+                    wrapMode: Text.WrapAnywhere
+                    font.family: root.mono; font.pixelSize: root.s(10)
+                }
+            }
             Text {
                 anchors { right: parent.right; bottom: parent.bottom }
-                text: "1/2 PAGES   R RESCAN   ESC CLOSE"
+                text: "1-4 PAGES   R RESCAN   ESC CLOSE"
                 color: root.overlay0
                 font.family: root.mono; font.pixelSize: root.s(9); font.letterSpacing: root.s(1)
             }
