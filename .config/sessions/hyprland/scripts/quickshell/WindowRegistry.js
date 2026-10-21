@@ -48,6 +48,7 @@ function getLayout(name, mx, my, mw, mh, userScale) {
 
         // --- Extralarge / Custom Centered ---
         "guide":     { w: s(1200, scale), h: s(750, scale), rx: Math.floor((mw/2)-(s(1200, scale)/2)), ry: Math.floor((mh/2)-(s(750, scale)/2)), comp: "guide/GuidePopup.qml" },
+        "syshub": { w: s(1240, scale), h: s(780, scale), rx: Math.floor((mw/2)-(s(1200, scale)/2)), ry: Math.floor((mh/2)-(s(750, scale)/2)), comp: "syshub/SysHubPopup.qml" },
         "translate": { w: s(1200, scale), h: s(750, scale), rx: Math.floor((mw/2)-(s(1200, scale)/2)), ry: Math.floor((mh/2)-(s(750, scale)/2)), comp: "translate/TranslatePopup.qml" },
         "power": { w: s(1040, scale), h: s(700, scale), rx: Math.floor((mw/2)-(s(1040, scale)/2)), ry: Math.floor((mh/2)-(s(700, scale)/2)), comp: "power/PowerPopup.qml" },
         "aeroget": { w: s(1120, scale), h: s(720, scale), rx: Math.floor((mw/2)-(s(1120, scale)/2)), ry: Math.floor((mh/2)-(s(720, scale)/2)), comp: "aeroget/AeroGetPopup.qml" },

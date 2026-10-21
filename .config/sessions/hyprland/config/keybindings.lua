@@ -122,7 +122,9 @@ end
 -- OCR translate
 hl.bind(mainMod .. " + T", hl.dsp.exec_cmd("bash ~/.config/hypr/scripts/qs_manager.sh toggle translate"))
 
-hl.bind(mainMod .. " + SUPER + T", hl.dsp.exec_cmd("~/.config/hypr/scripts/ocr_translate.sh --empty"))
 
 hl.bind(mainMod .. " + ALT + T", hl.dsp.exec_cmd("~/.config/hypr/scripts/ocr_translate.sh --empty"))
 hl.bind(mainMod .. " + SHIFT + G", hl.dsp.exec_cmd("bash ~/.config/hypr/scripts/qs_manager.sh toggle aeroget"))
+hl.bind(mainMod .. " + P", hl.dsp.exec_cmd("bash ~/.config/hypr/scripts/qs_manager.sh toggle vault"))
+
+hl.bind(mainMod .. " + SHIFT + U", hl.dsp.exec_cmd("bash ~/.config/hypr/scripts/qs_manager.sh toggle syshub"))
