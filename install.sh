@@ -152,6 +152,7 @@ if [ -z "$TELEMETRY_ID" ]; then
 fi
 
 ARCH_PKGS=(
+    pacman-contrib smartmontools reflector  # syshub
     "hyprland" "hypridle" "hyprsunset" "kitty" "cava" "zbar" "pavucontrol" "fprintd" "alsa-utils" "awww" "networkmanager-dmenu-git"
     "wl-clipboard" "fd" "qt6-multimedia" "qt6-5compat" "ripgrep"
     "cliphist" "jq" "socat" "inotify-tools" "pamixer" "brightnessctl" "acpi" "iw"
