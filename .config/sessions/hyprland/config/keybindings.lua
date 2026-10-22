@@ -128,3 +128,5 @@ hl.bind(mainMod .. " + SHIFT + G", hl.dsp.exec_cmd("bash ~/.config/hypr/scripts/
 hl.bind(mainMod .. " + P", hl.dsp.exec_cmd("bash ~/.config/hypr/scripts/qs_manager.sh toggle vault"))
 
 hl.bind(mainMod .. " + SHIFT + U", hl.dsp.exec_cmd("bash ~/.config/hypr/scripts/qs_manager.sh toggle syshub"))
+
+hl.bind(mainMod .. " + SHIFT + M", hl.dsp.exec_cmd("bash ~/.config/hypr/scripts/qs_manager.sh toggle manga"))
