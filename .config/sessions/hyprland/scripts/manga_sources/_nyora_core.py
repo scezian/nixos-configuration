@@ -1,7 +1,7 @@
 # Nyora source: any of Nyora's ~390 sources through the local helper (auto-started).
 # Config (optional): ~/.local/share/qs-manga/nyora.json
 #   {"source": "COMICK_FUN", "lang": "english", "nsfw": false}
-import glob, json, os, socket, subprocess, time, urllib.parse, urllib.request
+import glob, json, os, socket, subprocess, sys, time, urllib.parse, urllib.request
 
 H = os.path.expanduser("~")
 PORTF = H + "/.config/nyora/helper.port"
@@ -47,12 +47,25 @@ def _watchdog():
                          stderr=subprocess.DEVNULL, start_new_session=True)
 
 
+def _jar():
+    pat = VENV + "/lib/python*/site-packages/nyora_extension_server/_jar/*.jar"
+    j = glob.glob(pat)
+    if not j:
+        try:
+            subprocess.run([sys.executable, "-m", "venv", VENV], check=True, timeout=180, capture_output=True)
+            subprocess.run([VENV + "/bin/pip", "install", "--quiet", "nyora"], check=True, timeout=900, capture_output=True)
+        except Exception:
+            pass
+        j = glob.glob(pat)
+    if not j:
+        raise RuntimeError("nyora not installed in " + VENV)
+    return j[0]
+
+
 def _base():
     p = _port()
     if not (p and _alive(p)):
-        jars = glob.glob(VENV + "/lib/python*/site-packages/nyora_extension_server/_jar/*.jar")
-        if not jars:
-            raise RuntimeError("nyora helper jar not found; install nyora in " + VENV)
+        jar = _jar()
         try:
             os.remove(PORTF)
         except OSError:
@@ -60,7 +73,7 @@ def _base():
         os.makedirs(os.path.dirname(PORTF), exist_ok=True)
         os.makedirs(os.path.dirname(LOG), exist_ok=True)
         lg = open(LOG, "ab")
-        subprocess.Popen(["java", "-Dnyora.helper.port-file=" + PORTF, "-jar", jars[0]],
+        subprocess.Popen(["java", "-Dnyora.helper.port-file=" + PORTF, "-jar", jar],
                          stdout=lg, stderr=lg, stdin=subprocess.DEVNULL, start_new_session=True)
         for _ in range(120):
             time.sleep(0.5)

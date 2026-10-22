@@ -152,6 +152,7 @@ if [ -z "$TELEMETRY_ID" ]; then
 fi
 
 ARCH_PKGS=(
+    "jre17-openjdk-headless"  # manga: Nyora helper engine
     pacman-contrib smartmontools reflector  # syshub
     "hyprland" "hypridle" "hyprsunset" "kitty" "cava" "zbar" "pavucontrol" "fprintd" "alsa-utils" "awww" "networkmanager-dmenu-git"
     "wl-clipboard" "fd" "qt6-multimedia" "qt6-5compat" "ripgrep"
@@ -1509,6 +1510,11 @@ if [ -f "$HOME/.local/share/qs-dict/cedict.db" ]; then
 else
     echo "  -> Lexicon dictionary not built (offline?). Later run: $LEX_VENV/bin/python $LEX_PY build"
 fi
+
+# --- MANGA//DECK: Nyora venv (the Asura/Flame source plugins start its helper on demand) ---
+MANGA_VENV="$HOME/.local/share/qs-manga/venv"
+[ -x "$MANGA_VENV/bin/python" ] || python3 -m venv "$MANGA_VENV" 2>/dev/null || true
+[ -x "$MANGA_VENV/bin/pip" ] && "$MANGA_VENV/bin/pip" install --quiet nyora 2>/dev/null || true
 
 if [ "$INSTALL_ZSH" = true ] && command -v zsh &> /dev/null; then
     if [ ! -d "$HOME/.oh-my-zsh" ]; then
