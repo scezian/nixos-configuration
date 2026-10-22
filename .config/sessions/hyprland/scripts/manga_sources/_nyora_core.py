@@ -149,9 +149,37 @@ def _covers(items):
     return items
 
 
+LIB = H + "/.local/share/qs-manga/library.json"
+LANGS = {
+    "en": ["english"], "pt": ["portugu"], "pt-br": ["portugu"], "es": ["espa", "spanish"],
+    "es-la": ["espa", "spanish"], "fr": ["fran", "french"], "de": ["deutsch", "german"],
+    "it": ["ital"], "ru": ["рус", "russian"], "uk": ["укра"], "id": ["indonesia"],
+    "ja": ["日本", "japan"], "ko": ["한국", "korean"], "zh": ["中文", "chinese", "简体", "繁體"],
+    "zh-hk": ["中文", "chinese", "繁體"], "ar": ["عرب", "arabic"], "tr": ["türk", "turk"],
+    "pl": ["polski", "polish"], "vi": ["tiếng việt", "viet"], "th": ["ไทย", "thai"],
+    "hi": ["हिन्दी", "hindi"],
+}
+
+
+def _settings():
+    try:
+        return json.load(open(LIB)).get("settings", {})
+    except Exception:
+        return {}
+
+
+def _nsfw():
+    return _settings().get("rating_erotica", False) is True
+
+
+def _lang_keys():
+    code = str(_settings().get("lang") or "en").lower()
+    return LANGS.get(code, [code])
+
+
 def _entries(d):
     es = d.get("entries", []) if isinstance(d, dict) else d
-    if not _cfg().get("nsfw", False):
+    if not _nsfw():
         es = [e for e in es if not (e.get("is_nsfw") or e.get("isNsfw"))]
     return es
 
@@ -193,10 +221,11 @@ class Source:
         groups = {}
         for c in chs:
             groups.setdefault(c.get("branch") or "", []).append(c)
-        want = str(_cfg().get("lang", "")).lower()
         pick = None
-        if want:
-            pick = next((b for b in groups if want in b.lower()), None)
+        for k in _lang_keys():
+            pick = next((b for b in groups if k in b.lower()), None)
+            if pick is not None:
+                break
         if pick is None:
             pick = next((b for b in groups if "english" in b.lower()), None)
         if pick is None and groups:
