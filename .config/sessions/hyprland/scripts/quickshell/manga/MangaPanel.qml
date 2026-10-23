@@ -406,7 +406,13 @@ Item {
         id: sourcesProc
         command: ["python3", root.script, "sources"]
         stdout: StdioCollector {
-            onStreamFinished: { var d = root.parse(text, null); if (Array.isArray(d) && d.length > 0) { root.sources = d; var okS = false; for (var si = 0; si < d.length; si++) if (d[si].id === root.src) okS = true; if (!okS) root.src = "md" } }
+            onStreamFinished: { var d = root.parse(text, null); if (Array.isArray(d) && d.length > 0) { root.sources = d; var okS = false; for (var si = 0; si < d.length; si++) if (d[si].id === root.src) okS = true; if (!okS && root.src !== "all") {
+                    var fb = "local"
+                    for (var fi = 0; fi < d.length; fi++) if (d[fi].id !== "local") { fb = d[fi].id; break }
+                    root.src = fb
+                    if (root.cs("def_src", "md") === "md") root.setCfg("def_src", fb)
+                    if (root.tab === "discover") root.loadList()
+                } } }
         }
     }
     Process {
@@ -730,6 +736,18 @@ Item {
                 property bool srcOpen: false
                 visible: root.tab === "discover"
                 onVisibleChanged: if (!visible) srcOpen = false
+                function curIdx() {
+                    if (root.src === "all") return 0
+                    for (var i = 0; i < root.sources.length; i++) if (root.sources[i].id === root.src) return i + 1
+                    return 0
+                }
+                onSrcOpenChanged: {
+                    if (srcOpen) {
+                        lvSrc.currentIndex = curIdx()
+                        lvSrc.positionViewAtIndex(lvSrc.currentIndex, ListView.Contain)
+                        lvSrc.forceActiveFocus()
+                    } else root.forceActiveFocus()
+                }
                 MouseArea { anchors.fill: parent; z: 18; visible: discoverRoot.srcOpen; onClicked: discoverRoot.srcOpen = false }
                 Rectangle {
                     id: srcPop
@@ -741,19 +759,48 @@ Item {
                     color: root.crust
                     border.width: 1; border.color: root.peach
                     clip: true
+                    MScroll { z: 5; hub: root; target: lvSrc; anchors { right: lvSrc.right; top: lvSrc.top; bottom: lvSrc.bottom } }
                     ListView {
                         id: lvSrc
                         anchors.fill: parent; anchors.margins: root.s(6)
                         clip: true
                         spacing: root.s(3)
                         boundsBehavior: Flickable.StopAtBounds
+                        currentIndex: 0
+                        highlightMoveDuration: 0
+                        keyNavigationEnabled: false
+                        function pick(i) {
+                            var m = lvSrc.model[i]
+                            if (!m) return
+                            root.src = m.id
+                            discoverRoot.srcOpen = false
+                            root.forceActiveFocus()
+                            root.loadList()
+                        }
+                        Keys.onPressed: function (e) {
+                            var n = lvSrc.count
+                            var pg = Math.max(1, Math.floor(lvSrc.height / root.s(37)) - 1)
+                            if (e.key === Qt.Key_Down) currentIndex = Math.min(n - 1, currentIndex + 1)
+                            else if (e.key === Qt.Key_Up) currentIndex = Math.max(0, currentIndex - 1)
+                            else if (e.key === Qt.Key_PageDown) currentIndex = Math.min(n - 1, currentIndex + pg)
+                            else if (e.key === Qt.Key_PageUp) currentIndex = Math.max(0, currentIndex - pg)
+                            else if (e.key === Qt.Key_Home) currentIndex = 0
+                            else if (e.key === Qt.Key_End) currentIndex = n - 1
+                            else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) { pick(currentIndex); e.accepted = true; return }
+                            else if (e.key === Qt.Key_Escape) { discoverRoot.srcOpen = false; root.forceActiveFocus(); e.accepted = true; return }
+                            else return
+                            e.accepted = true
+                            positionViewAtIndex(currentIndex, ListView.Contain)
+                        }
                         model: [{ id: "all", name: "All enabled sources (global search)" }].concat(root.sources)
                         delegate: Rectangle {
                             id: opt
                             required property var modelData
                             readonly property bool on: root.src === modelData.id
-                            width: ListView.view.width; height: root.s(34); radius: root.s(7)
+                            width: ListView.view.width - root.s(20); height: root.s(34); radius: root.s(7)
                             color: on ? Qt.alpha(root.peach, 0.25) : (oma.containsMouse ? Qt.alpha(root.surface1, 0.6) : "transparent")
+                            border.width: ListView.isCurrentItem ? 1 : 0
+                            border.color: root.peach
                             Text {
                                 anchors { left: parent.left; leftMargin: root.s(12); right: parent.right; rightMargin: root.s(12); verticalCenter: parent.verticalCenter }
                                 elide: Text.ElideRight

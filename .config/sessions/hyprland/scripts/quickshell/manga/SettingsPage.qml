@@ -425,11 +425,11 @@ Item {
                 SRow { hub: sp.hub; label: "Start on"
                     Seg { hub: sp.hub; opts: [{ v: "library", l: "LIBRARY" }, { v: "discover", l: "DISCOVER" }]
                           cur: sp.hub.cs("def_tab", "library"); onPicked: function (v) { sp.hub.setCfg("def_tab", v) } } }
-                SRow { hub: sp.hub; label: "MangaDex language"
+                SRow { hub: sp.hub; label: "Chapter language"
                     Seg { hub: sp.hub
                           opts: [{ v: "en", l: "EN" }, { v: "es", l: "ES" }, { v: "pt-br", l: "PT-BR" }, { v: "fr", l: "FR" }, { v: "id", l: "ID" }, { v: "ru", l: "RU" }]
                           cur: sp.hub.cs("lang", "en"); onPicked: function (v) { sp.hub.setCfg("lang", v) } } }
-                SRow { hub: sp.hub; label: "Include suggestive"
+                SRow { hub: sp.hub; visible: false; label: "Include suggestive"
                     Tgl { hub: sp.hub; on: sp.hub.cb("rating_suggestive", true); onFlipped: sp.hub.setCfg("rating_suggestive", !on) } }
                 SRow { hub: sp.hub; label: "Include erotica"
                     Tgl { hub: sp.hub; on: sp.hub.cb("rating_erotica", false); onFlipped: sp.hub.setCfg("rating_erotica", !on) } }

@@ -332,6 +332,7 @@ class Local:
 # ------------------------------------------------------------ plugins
 def load_plugins():
     SOURCES["md"] = MangaDex()
+    SOURCES["md"].HIDDEN = True  # stays registered so library titles and downloads still open
     SOURCES["local"] = Local()
     d = os.path.dirname(os.path.abspath(__file__)) + "/manga_sources"
     for f in sorted(glob.glob(d + "/[!_]*.py")):
