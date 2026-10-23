@@ -183,8 +183,20 @@ Item {
         var mgr = home + "/.config/hypr/scripts/qs_manager.sh"
         var lay = home + "/.config/hypr/scripts/manga_layout.py"
         toast("RESTARTING PANEL...")
-        Quickshell.execDetached(["setsid", "sh", "-c",
-            "if python3 '" + lay + "' " + w + " " + h + " " + sd + "; then pkill -f 'quickshell.*Main.qml'; sleep 1; bash '" + mgr + "' close; sleep 3; bash '" + mgr + "' open manga; fi"])
+        var sh = [
+            "exec >/tmp/qs-manga-apply.log 2>&1",
+            "MAIN='" + home + "/.config/hypr/scripts/quickshell/Main.qml'",
+            "if python3 '" + lay + "' " + w + " " + h + " " + sd + "; then",
+            "  if ! qs -p $MAIN ipc call main forceReload; then",
+            "    pkill -f 'quickshell.*Main.qml'; sleep 1; setsid -f quickshell -p $MAIN",
+            "  fi",
+            "  sleep 3",
+            "  for i in $(seq 40); do pgrep -f 'inotifywait.*qs_widget_state' >/dev/null && break; sleep 0.5; done",
+            "  sleep 1",
+            "  bash '" + mgr + "' open manga",
+            "fi"
+        ].join("\n")
+        Quickshell.execDetached(["setsid", "sh", "-c", sh])
     }
     function loadLib() {
         if (libProc.running) { libAgain = true; return }
@@ -993,13 +1005,14 @@ Item {
                 Item {
                     id: chHead
                     anchors { left: parent.left; right: parent.right; top: dDesc.bottom; topMargin: root.s(12) }
-                    height: root.s(30)
+                    height: Math.max(root.s(30), jumpBox.height + root.s(4))
                     Text { anchors.verticalCenter: parent.verticalCenter
                            text: "CHAPTERS  " + root.chapters.length; color: root.pink
                            font.family: root.mono; font.pixelSize: root.fs(11); font.bold: true; font.letterSpacing: root.s(2) }
                     Rectangle {
                         anchors { right: orderBtn.left; rightMargin: root.s(8); verticalCenter: parent.verticalCenter }
-                        width: root.s(170); height: root.s(26); radius: root.s(7)
+                        id: jumpBox
+                        width: root.s(190); height: Math.max(root.s(26), jumpIn.contentHeight + root.s(14)); radius: root.s(7)
                         color: Qt.alpha(root.surface0, 0.6)
                         border.width: 1
                         border.color: jumpIn.activeFocus ? root.pink : Qt.alpha(root.mauve, 0.4)
