@@ -125,6 +125,12 @@ Rectangle {
         }
     }
 
+    property var enh: ({})
+    function enhW() {
+        var w = rd.mode === "scroll" ? lv.width * rd.stripWidth : paged.width
+        return Math.max(400, Math.round(w / 50) * 50)
+    }
+
     Item {
         id: area
         anchors { left: parent.left; right: parent.right; top: topBar.bottom; bottom: botBar.top }
@@ -156,6 +162,16 @@ Rectangle {
                     text: pimg.status === Image.Error ? "FAILED - TAP TO RETRY" : "LOADING " + (pimg.index + 1)
                     color: pimg.status === Image.Error ? rd.hub.red : rd.hub.overlay0
                     font.family: rd.hub.mono; font.pixelSize: rd.hub.fs(11); font.letterSpacing: rd.hub.s(2)
+                }
+                Image {
+                    anchors.fill: parent
+                    source: rd.enh[String(pimg.index)] || ""
+                    asynchronous: true
+                    cache: false
+                    smooth: true
+                    fillMode: Image.Stretch
+                    sourceSize.width: Math.round(pimg.width)
+                    visible: status === Image.Ready
                 }
                 MouseArea {
                     anchors.fill: parent
@@ -191,6 +207,16 @@ Rectangle {
                 cache: true
                 smooth: true
                 sourceSize.width: Math.round(paged.width * 2)
+            }
+            Image {
+                anchors.fill: parent
+                source: rd.enh[String(rd.index)] || ""
+                asynchronous: true
+                cache: false
+                smooth: true
+                fillMode: Image.PreserveAspectFit
+                sourceSize.width: Math.round(paged.width * 2)
+                visible: status === Image.Ready
             }
             Image { width: 1; height: 1; visible: false; asynchronous: true; cache: true
                     sourceSize.width: Math.round(paged.width * 2)

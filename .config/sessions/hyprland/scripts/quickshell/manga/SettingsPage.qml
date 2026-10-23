@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import "."
 
 Item {
@@ -8,10 +9,101 @@ Item {
     function s(v) { return hub.s(v) }
     function fs(v) { return hub.fs(v) }
     property string confirm: ""
+    property string page: ""
+    onPageChanged: { flick.contentY = 0; if (page === "sources") { extLimit = 60; refilter(); if (nlist.length === 0) loadExt(false) } }
+    function back() { if (page === "") return false; page = ""; return true }
     Timer { id: confT; interval: 3000; onTriggered: sp.confirm = "" }
     onVisibleChanged: if (visible) { hub.refreshSizes(); hub.refreshDl() }
     function sumRead() { var n = 0; for (var i = 0; i < hub.lib.length; i++) n += hub.lib[i].read_count || 0; return n }
     function ask(id, fn) { if (confirm === id) { confirm = ""; fn() } else { confirm = id; confT.restart() } }
+
+    // ---------------- extensions manager (Nyora sources)
+    property var nlist: []
+    property var extShown: []
+    property int extTotal: 0
+    property int extLimit: 60
+    property bool extLoading: false
+    property string extErr: ""
+    property string extQuery: ""
+    property string extLang: "mine"
+    property string testing: ""
+    property var health: ({})
+    function enabledCount() { var n = 0; for (var i = 0; i < nlist.length; i++) if (nlist[i].on) n++; return n }
+    function extStatus(id) {
+        if (testing === id) return "  /  TESTING..."
+        var h = health[id]
+        if (!h) return ""
+        return h.ok ? "  /  WORKING" : "  /  BROKEN: " + h.detail
+    }
+    function refilter() {
+        var q = extQuery.toLowerCase()
+        var mine = hub.cs("lang", "en").toLowerCase().split("-")[0]
+        var nsfwOk = hub.cb("rating_erotica", false)
+        var on = [], off = []
+        for (var i = 0; i < nlist.length; i++) {
+            var e = nlist[i]
+            if (!e.on) {
+                if (e.nsfw && !nsfwOk) continue
+                if (extLang === "mine" && e.lang !== "all" && e.lang.toLowerCase().split("-")[0] !== mine) continue
+            }
+            if (q !== "" && e.name.toLowerCase().indexOf(q) < 0) continue
+            if (e.on) on.push(e); else off.push(e)
+        }
+        var all = on.concat(off)
+        extTotal = all.length
+        extShown = all.slice(0, extLimit)
+    }
+    function loadExt(refresh) {
+        if (extLoading) return
+        extLoading = true; extErr = ""
+        listProc.command = ["python3", hub.script, "nyora-list"].concat(refresh ? ["refresh"] : [])
+        listProc.running = true
+    }
+    function gotList(t) {
+        extLoading = false
+        var d = hub.parse(t, null)
+        if (!d || d.error || !Array.isArray(d.sources)) { extErr = (d && d.error) ? d.error : "no response"; return }
+        nlist = d.sources; health = d.health || {}
+        refilter()
+    }
+    function toggleExt(id) {
+        togProc.command = ["python3", hub.script, "nyora-toggle", id]
+        togProc.running = true
+    }
+    function gotToggle(t) {
+        var d = hub.parse(t, null)
+        if (!d || d.error) { extErr = (d && d.error) ? d.error : "toggle failed"; return }
+        for (var i = 0; i < nlist.length; i++) if (nlist[i].id === d.id) nlist[i].on = d.on
+        nlist = nlist.slice()
+        refilter()
+        hub.refreshSources()
+    }
+    function runTest(id) {
+        if (testing !== "") return
+        testing = id
+        testProc.command = ["python3", hub.script, "nyora-test", id]
+        testProc.running = true
+    }
+    function gotTest(t) {
+        var d = hub.parse(t, null)
+        var h = Object.assign({}, health)
+        h[testing] = { ok: !!(d && d.ok), detail: d ? (d.detail || d.error || "") : "no response" }
+        health = h
+        testing = ""
+    }
+    Process { id: listProc; stdout: StdioCollector { onStreamFinished: sp.gotList(text) } }
+    Process { id: togProc; stdout: StdioCollector { onStreamFinished: sp.gotToggle(text) } }
+    Process { id: testProc; stdout: StdioCollector { onStreamFinished: sp.gotTest(text) } }
+    Connections {
+        target: flick
+        function onContentYChanged() {
+            if (sp.page === "sources" && sp.extShown.length < sp.extTotal
+                && flick.contentY + flick.height > flick.contentHeight - sp.s(260)) {
+                sp.extLimit += 60
+                sp.refilter()
+            }
+        }
+    }
 
     component Sec: Item {
         id: sc
@@ -187,6 +279,7 @@ Item {
             spacing: sp.s(2)
 
             Row {
+                visible: sp.page === ""
                 spacing: sp.s(8)
                 Repeater {
                     model: [{ l: "LIBRARY", v: sp.hub.lib.length },
@@ -208,161 +301,277 @@ Item {
                 }
             }
 
-            Sec { hub: sp.hub; title: "READING" }
-            SRow { hub: sp.hub; label: "Mode: manga"
-                Seg { hub: sp.hub; opts: [{ v: "scroll", l: "SCROLL" }, { v: "paged", l: "PAGED" }]
-                      cur: sp.hub.modeFor("MANGA"); onPicked: function (v) { sp.hub.setCfg("mode_MANGA", v) } } }
-            SRow { hub: sp.hub; label: "Mode: manhwa"
-                Seg { hub: sp.hub; opts: [{ v: "scroll", l: "SCROLL" }, { v: "paged", l: "PAGED" }]
-                      cur: sp.hub.modeFor("MANHWA"); onPicked: function (v) { sp.hub.setCfg("mode_MANHWA", v) } } }
-            SRow { hub: sp.hub; label: "Mode: manhua"
-                Seg { hub: sp.hub; opts: [{ v: "scroll", l: "SCROLL" }, { v: "paged", l: "PAGED" }]
-                      cur: sp.hub.modeFor("MANHUA"); onPicked: function (v) { sp.hub.setCfg("mode_MANHUA", v) } } }
-            SRow { hub: sp.hub; label: "Paged direction: manga"; hint: "RTL = tap right side goes back"
-                Seg { hub: sp.hub; opts: [{ v: "rtl", l: "RIGHT TO LEFT" }, { v: "ltr", l: "LEFT TO RIGHT" }]
-                      cur: sp.hub.rtlFor("MANGA") ? "rtl" : "ltr"
-                      onPicked: function (v) { sp.hub.setCfg("rtl_MANGA", v === "rtl") } } }
-            SRow { hub: sp.hub; label: "Paged direction: others"
-                Seg { hub: sp.hub; opts: [{ v: "rtl", l: "RIGHT TO LEFT" }, { v: "ltr", l: "LEFT TO RIGHT" }]
-                      cur: sp.hub.rtlFor("MANHWA") ? "rtl" : "ltr"
-                      onPicked: function (v) { sp.hub.setCfg("rtl_MANHWA", v === "rtl"); sp.hub.setCfg("rtl_MANHUA", v === "rtl") } } }
-            SRow { hub: sp.hub; label: "Strip width"; hint: "scroll mode page width"
-                Sld { hub: sp.hub; from: 50; to: 100; step: 5; suffix: "%"; value: sp.hub.cn("strip_width", 100)
-                      onMoved: function (v) { sp.hub.setCfgLocal("strip_width", v) }; onReleased: sp.hub.commitCfg("strip_width") } }
-            SRow { hub: sp.hub; label: "Scroll step"; hint: "arrow keys, pixels"
-                Sld { hub: sp.hub; from: 60; to: 400; step: 20; suffix: "px"; value: sp.hub.cn("scroll_step", 160)
-                      onMoved: function (v) { sp.hub.setCfgLocal("scroll_step", v) }; onReleased: sp.hub.commitCfg("scroll_step") } }
-            SRow { hub: sp.hub; label: "Data saver"; hint: "smaller images, less bandwidth"
-                Tgl { hub: sp.hub; on: sp.hub.cb("saver", false); onFlipped: sp.hub.setCfg("saver", !on) } }
-            SRow { hub: sp.hub; label: "Auto-open next chapter"
-                Tgl { hub: sp.hub; on: sp.hub.cb("auto_next", true); onFlipped: sp.hub.setCfg("auto_next", !on) } }
-            SRow { hub: sp.hub; label: "Mark read at chapter end"
-                Tgl { hub: sp.hub; on: sp.hub.cb("auto_read", true); onFlipped: sp.hub.setCfg("auto_read", !on) } }
-            SRow { hub: sp.hub; label: "Reader background"
-                Seg { hub: sp.hub; opts: [{ v: "theme", l: "THEME" }, { v: "black", l: "BLACK" }, { v: "base", l: "LIGHTER" }]
-                      cur: sp.hub.cs("reader_bg", "theme"); onPicked: function (v) { sp.hub.setCfg("reader_bg", v) } } }
+            Column {
+                width: col.width
+                spacing: sp.s(8)
+                visible: sp.page === ""
+                Item { width: 1; height: sp.s(6) }
+                Repeater {
+                    model: [{ k: "reading", l: "READING", d: "modes, direction, strip width, scrolling, auto-next" },
+                            { k: "library", l: "LIBRARY", d: "sort, grid columns, badges, chapter order" },
+                            { k: "sources", l: "SOURCES", d: "defaults, language, content filters, local folder" },
+                            { k: "appearance", l: "APPEARANCE", d: "colour, text size, panel layout, effects" },
+                            { k: "data", l: "DATA", d: "downloads, cache, reset" }]
+                    delegate: Rectangle {
+                        id: cat
+                        required property var modelData
+                        width: col.width; height: sp.s(66); radius: sp.s(10)
+                        color: cma.containsMouse ? Qt.alpha(sp.hub.pink, 0.16) : Qt.alpha(sp.hub.pink, 0.06)
+                        border.width: 1
+                        border.color: Qt.alpha(sp.hub.pink, cma.containsMouse ? 0.7 : 0.35)
+                        Behavior on color { ColorAnimation { duration: 120 } }
+                        Column {
+                            anchors { left: parent.left; leftMargin: sp.s(18); verticalCenter: parent.verticalCenter }
+                            spacing: sp.s(4)
+                            Text { text: cat.modelData.l; color: sp.hub.text
+                                   font.family: sp.hub.mono; font.pixelSize: sp.fs(12); font.bold: true; font.letterSpacing: sp.s(2) }
+                            Text { text: cat.modelData.d; color: sp.hub.subtext0
+                                   font.family: sp.hub.mono; font.pixelSize: sp.fs(8) }
+                        }
+                        Text { anchors { right: parent.right; rightMargin: sp.s(18); verticalCenter: parent.verticalCenter }
+                               text: ">"; color: sp.hub.pink
+                               font.family: sp.hub.mono; font.pixelSize: sp.fs(16); font.bold: true }
+                        MouseArea { id: cma; anchors.fill: parent; hoverEnabled: true; onClicked: sp.page = cat.modelData.k }
+                    }
+                }
+            }
 
-            Sec { hub: sp.hub; title: "LIBRARY" }
-            SRow { hub: sp.hub; label: "Add to library when reading"
-                Tgl { hub: sp.hub; on: sp.hub.cb("auto_add", true); onFlipped: sp.hub.setCfg("auto_add", !on) } }
-            SRow { hub: sp.hub; label: "Sort"
-                Seg { hub: sp.hub; opts: [{ v: "recent", l: "RECENT" }, { v: "title", l: "TITLE" }, { v: "added", l: "ADDED" }]
-                      cur: sp.hub.cs("lib_sort", "recent"); onPicked: function (v) { sp.hub.setCfg("lib_sort", v) } } }
-            SRow { hub: sp.hub; label: "Grid columns"
-                Seg { hub: sp.hub; opts: [{ v: "2", l: "2" }, { v: "3", l: "3" }, { v: "4", l: "4" }]
-                      cur: String(sp.hub.cn("cols", 3)); onPicked: function (v) { sp.hub.setCfg("cols", Number(v)) } } }
-            SRow { hub: sp.hub; label: "Chapter order"
-                Seg { hub: sp.hub; opts: [{ v: "newest", l: "NEWEST FIRST" }, { v: "oldest", l: "OLDEST FIRST" }]
-                      cur: sp.hub.cb("ch_rev", true) ? "newest" : "oldest"
-                      onPicked: function (v) { sp.hub.setCfg("ch_rev", v === "newest"); sp.hub.chRev = (v === "newest") } } }
-            SRow { hub: sp.hub; label: "Show kind badge"
-                Tgl { hub: sp.hub; on: sp.hub.cb("show_badge", true); onFlipped: sp.hub.setCfg("show_badge", !on) } }
-            SRow { hub: sp.hub; label: "Show chapter badge"
-                Tgl { hub: sp.hub; on: sp.hub.cb("show_ch_badge", true); onFlipped: sp.hub.setCfg("show_ch_badge", !on) } }
-            SRow { hub: sp.hub; label: "Show titles"
-                Tgl { hub: sp.hub; on: sp.hub.cb("show_titles", true); onFlipped: sp.hub.setCfg("show_titles", !on) } }
+            Column {
+                width: col.width
+                spacing: sp.s(2)
+                visible: sp.page === "reading"
+                MBtn { hub: sp.hub; label: "< BACK"; accent: sp.hub.yellow; onClicked: sp.page = "" }
+                Sec { hub: sp.hub; title: "READING" }
+                SRow { hub: sp.hub; label: "Mode: manga"
+                    Seg { hub: sp.hub; opts: [{ v: "scroll", l: "SCROLL" }, { v: "paged", l: "PAGED" }]
+                          cur: sp.hub.modeFor("MANGA"); onPicked: function (v) { sp.hub.setCfg("mode_MANGA", v) } } }
+                SRow { hub: sp.hub; label: "Mode: manhwa"
+                    Seg { hub: sp.hub; opts: [{ v: "scroll", l: "SCROLL" }, { v: "paged", l: "PAGED" }]
+                          cur: sp.hub.modeFor("MANHWA"); onPicked: function (v) { sp.hub.setCfg("mode_MANHWA", v) } } }
+                SRow { hub: sp.hub; label: "Mode: manhua"
+                    Seg { hub: sp.hub; opts: [{ v: "scroll", l: "SCROLL" }, { v: "paged", l: "PAGED" }]
+                          cur: sp.hub.modeFor("MANHUA"); onPicked: function (v) { sp.hub.setCfg("mode_MANHUA", v) } } }
+                SRow { hub: sp.hub; label: "Paged direction: manga"; hint: "RTL = tap right side goes back"
+                    Seg { hub: sp.hub; opts: [{ v: "rtl", l: "RIGHT TO LEFT" }, { v: "ltr", l: "LEFT TO RIGHT" }]
+                          cur: sp.hub.rtlFor("MANGA") ? "rtl" : "ltr"
+                          onPicked: function (v) { sp.hub.setCfg("rtl_MANGA", v === "rtl") } } }
+                SRow { hub: sp.hub; label: "Paged direction: others"
+                    Seg { hub: sp.hub; opts: [{ v: "rtl", l: "RIGHT TO LEFT" }, { v: "ltr", l: "LEFT TO RIGHT" }]
+                          cur: sp.hub.rtlFor("MANHWA") ? "rtl" : "ltr"
+                          onPicked: function (v) { sp.hub.setCfg("rtl_MANHWA", v === "rtl"); sp.hub.setCfg("rtl_MANHUA", v === "rtl") } } }
+                SRow { hub: sp.hub; label: "Strip width"; hint: "scroll mode page width"
+                    Sld { hub: sp.hub; from: 50; to: 100; step: 5; suffix: "%"; value: sp.hub.cn("strip_width", 100)
+                          onMoved: function (v) { sp.hub.setCfgLocal("strip_width", v) }; onReleased: sp.hub.commitCfg("strip_width") } }
+                SRow { hub: sp.hub; label: "Scroll step"; hint: "arrow keys, pixels"
+                    Sld { hub: sp.hub; from: 60; to: 400; step: 20; suffix: "px"; value: sp.hub.cn("scroll_step", 160)
+                          onMoved: function (v) { sp.hub.setCfgLocal("scroll_step", v) }; onReleased: sp.hub.commitCfg("scroll_step") } }
+                SRow { hub: sp.hub; label: "Data saver"; hint: "smaller images, less bandwidth"
+                    Tgl { hub: sp.hub; on: sp.hub.cb("saver", false); onFlipped: sp.hub.setCfg("saver", !on) } }
+                SRow { hub: sp.hub; label: "Sharpen pages"; hint: "resample to panel width, cached"
+                    Tgl { hub: sp.hub; on: sp.hub.cb("enhance", true); onFlipped: sp.hub.setCfg("enhance", !on) } }
+                SRow { hub: sp.hub; label: "Auto-open next chapter"
+                    Tgl { hub: sp.hub; on: sp.hub.cb("auto_next", true); onFlipped: sp.hub.setCfg("auto_next", !on) } }
+                SRow { hub: sp.hub; label: "Mark read at chapter end"
+                    Tgl { hub: sp.hub; on: sp.hub.cb("auto_read", true); onFlipped: sp.hub.setCfg("auto_read", !on) } }
+                SRow { hub: sp.hub; label: "Reader background"
+                    Seg { hub: sp.hub; opts: [{ v: "theme", l: "THEME" }, { v: "black", l: "BLACK" }, { v: "base", l: "LIGHTER" }]
+                          cur: sp.hub.cs("reader_bg", "theme"); onPicked: function (v) { sp.hub.setCfg("reader_bg", v) } } }
 
-            Sec { hub: sp.hub; title: "SOURCES" }
-            SRow { hub: sp.hub; label: "Default source"
-                Seg { hub: sp.hub
-                      opts: { var o = []; for (var i = 0; i < sp.hub.sources.length; i++) o.push({ v: sp.hub.sources[i].id, l: sp.hub.sources[i].name.toUpperCase() }); return o }
-                      cur: sp.hub.cs("def_src", "md"); onPicked: function (v) { sp.hub.setCfg("def_src", v) } } }
-            SRow { hub: sp.hub; label: "Default kind"
-                Seg { hub: sp.hub; opts: [{ v: "all", l: "ALL" }, { v: "manga", l: "MANGA" }, { v: "manhwa", l: "MANHWA" }, { v: "manhua", l: "MANHUA" }]
-                      cur: sp.hub.cs("def_kind", "all"); onPicked: function (v) { sp.hub.setCfg("def_kind", v) } } }
-            SRow { hub: sp.hub; label: "Default sort"
-                Seg { hub: sp.hub; opts: [{ v: "popular", l: "POPULAR" }, { v: "latest", l: "LATEST" }, { v: "rating", l: "RATING" }]
-                      cur: sp.hub.cs("def_sort", "popular"); onPicked: function (v) { sp.hub.setCfg("def_sort", v) } } }
-            SRow { hub: sp.hub; label: "Start on"
-                Seg { hub: sp.hub; opts: [{ v: "library", l: "LIBRARY" }, { v: "discover", l: "DISCOVER" }]
-                      cur: sp.hub.cs("def_tab", "library"); onPicked: function (v) { sp.hub.setCfg("def_tab", v) } } }
-            SRow { hub: sp.hub; label: "MangaDex language"
-                Seg { hub: sp.hub
-                      opts: [{ v: "en", l: "EN" }, { v: "es", l: "ES" }, { v: "pt-br", l: "PT-BR" }, { v: "fr", l: "FR" }, { v: "id", l: "ID" }, { v: "ru", l: "RU" }]
-                      cur: sp.hub.cs("lang", "en"); onPicked: function (v) { sp.hub.setCfg("lang", v) } } }
-            SRow { hub: sp.hub; label: "Include suggestive"
-                Tgl { hub: sp.hub; on: sp.hub.cb("rating_suggestive", true); onFlipped: sp.hub.setCfg("rating_suggestive", !on) } }
-            SRow { hub: sp.hub; label: "Include erotica"
-                Tgl { hub: sp.hub; on: sp.hub.cb("rating_erotica", false); onFlipped: sp.hub.setCfg("rating_erotica", !on) } }
-            SRow { hub: sp.hub; label: "Local folder"; hint: "series folders, .cbz, .zip"
-                Row {
-                    spacing: sp.s(6)
+            }
+
+            Column {
+                width: col.width
+                spacing: sp.s(2)
+                visible: sp.page === "library"
+                MBtn { hub: sp.hub; label: "< BACK"; accent: sp.hub.yellow; onClicked: sp.page = "" }
+                Sec { hub: sp.hub; title: "LIBRARY" }
+                SRow { hub: sp.hub; label: "Add to library when reading"
+                    Tgl { hub: sp.hub; on: sp.hub.cb("auto_add", true); onFlipped: sp.hub.setCfg("auto_add", !on) } }
+                SRow { hub: sp.hub; label: "Sort"
+                    Seg { hub: sp.hub; opts: [{ v: "recent", l: "RECENT" }, { v: "title", l: "TITLE" }, { v: "added", l: "ADDED" }]
+                          cur: sp.hub.cs("lib_sort", "recent"); onPicked: function (v) { sp.hub.setCfg("lib_sort", v) } } }
+                SRow { hub: sp.hub; label: "Grid columns"
+                    Seg { hub: sp.hub; opts: [{ v: "2", l: "2" }, { v: "3", l: "3" }, { v: "4", l: "4" }]
+                          cur: String(sp.hub.cn("cols", 3)); onPicked: function (v) { sp.hub.setCfg("cols", Number(v)) } } }
+                SRow { hub: sp.hub; label: "Chapter order"
+                    Seg { hub: sp.hub; opts: [{ v: "newest", l: "NEWEST FIRST" }, { v: "oldest", l: "OLDEST FIRST" }]
+                          cur: sp.hub.cb("ch_rev", true) ? "newest" : "oldest"
+                          onPicked: function (v) { sp.hub.setCfg("ch_rev", v === "newest"); sp.hub.chRev = (v === "newest") } } }
+                SRow { hub: sp.hub; label: "Show kind badge"
+                    Tgl { hub: sp.hub; on: sp.hub.cb("show_badge", true); onFlipped: sp.hub.setCfg("show_badge", !on) } }
+                SRow { hub: sp.hub; label: "Show chapter badge"
+                    Tgl { hub: sp.hub; on: sp.hub.cb("show_ch_badge", true); onFlipped: sp.hub.setCfg("show_ch_badge", !on) } }
+                SRow { hub: sp.hub; label: "Show titles"
+                    Tgl { hub: sp.hub; on: sp.hub.cb("show_titles", true); onFlipped: sp.hub.setCfg("show_titles", !on) } }
+
+            }
+
+            Column {
+                width: col.width
+                spacing: sp.s(2)
+                visible: sp.page === "sources"
+                MBtn { hub: sp.hub; label: "< BACK"; accent: sp.hub.yellow; onClicked: sp.page = "" }
+                Sec { hub: sp.hub; title: "SOURCES" }
+                SRow { hub: sp.hub; label: "Default source"
+                    Seg { hub: sp.hub
+                          opts: { var o = []; for (var i = 0; i < sp.hub.sources.length; i++) o.push({ v: sp.hub.sources[i].id, l: sp.hub.sources[i].name.toUpperCase() }); return o }
+                          cur: sp.hub.cs("def_src", "md"); onPicked: function (v) { sp.hub.setCfg("def_src", v) } } }
+                SRow { hub: sp.hub; label: "Default kind"
+                    Seg { hub: sp.hub; opts: [{ v: "all", l: "ALL" }, { v: "manga", l: "MANGA" }, { v: "manhwa", l: "MANHWA" }, { v: "manhua", l: "MANHUA" }]
+                          cur: sp.hub.cs("def_kind", "all"); onPicked: function (v) { sp.hub.setCfg("def_kind", v) } } }
+                SRow { hub: sp.hub; label: "Default sort"
+                    Seg { hub: sp.hub; opts: [{ v: "popular", l: "POPULAR" }, { v: "latest", l: "LATEST" }, { v: "rating", l: "RATING" }]
+                          cur: sp.hub.cs("def_sort", "popular"); onPicked: function (v) { sp.hub.setCfg("def_sort", v) } } }
+                SRow { hub: sp.hub; label: "Start on"
+                    Seg { hub: sp.hub; opts: [{ v: "library", l: "LIBRARY" }, { v: "discover", l: "DISCOVER" }]
+                          cur: sp.hub.cs("def_tab", "library"); onPicked: function (v) { sp.hub.setCfg("def_tab", v) } } }
+                SRow { hub: sp.hub; label: "MangaDex language"
+                    Seg { hub: sp.hub
+                          opts: [{ v: "en", l: "EN" }, { v: "es", l: "ES" }, { v: "pt-br", l: "PT-BR" }, { v: "fr", l: "FR" }, { v: "id", l: "ID" }, { v: "ru", l: "RU" }]
+                          cur: sp.hub.cs("lang", "en"); onPicked: function (v) { sp.hub.setCfg("lang", v) } } }
+                SRow { hub: sp.hub; label: "Include suggestive"
+                    Tgl { hub: sp.hub; on: sp.hub.cb("rating_suggestive", true); onFlipped: sp.hub.setCfg("rating_suggestive", !on) } }
+                SRow { hub: sp.hub; label: "Include erotica"
+                    Tgl { hub: sp.hub; on: sp.hub.cb("rating_erotica", false); onFlipped: sp.hub.setCfg("rating_erotica", !on) } }
+                SRow { hub: sp.hub; label: "Local folder"; hint: "series folders, .cbz, .zip"
+                    Row {
+                        spacing: sp.s(6)
+                        Rectangle {
+                            width: sp.s(200); height: Math.max(sp.s(30), lr.contentHeight + sp.s(16)); radius: sp.s(8)
+                            color: Qt.alpha(sp.hub.surface0, 0.6)
+                            border.width: 1; border.color: lr.activeFocus ? sp.hub.pink : Qt.alpha(sp.hub.pink, 0.4)
+                            TextInput {
+                                id: lr
+                                anchors.fill: parent; anchors.margins: sp.s(8)
+                                verticalAlignment: TextInput.AlignVCenter
+                                clip: true
+                                color: sp.hub.text
+                                selectionColor: Qt.alpha(sp.hub.pink, 0.4)
+                                font.family: sp.hub.mono; font.pixelSize: sp.fs(10)
+                                text: sp.hub.cs("local_root", "~/Manga")
+                                onAccepted: sp.hub.setCfg("local_root", text.trim())
+                                Keys.onEscapePressed: sp.hub.forceActiveFocus()
+                            }
+                        }
+                        MBtn { hub: sp.hub; label: "APPLY"; accent: sp.hub.green; onClicked: sp.hub.setCfg("local_root", lr.text.trim()) }
+                    }
+                }
+                Sec { hub: sp.hub; title: "EXTENSIONS" }
+                SRow { hub: sp.hub; label: "Source list"
+                    hint: sp.extErr !== "" ? sp.extErr : (sp.extLoading ? "loading..." : sp.nlist.length + " available, " + sp.enabledCount() + " enabled")
+                    MBtn { hub: sp.hub; label: "REFRESH"; accent: sp.hub.blue; onClicked: sp.loadExt(true) } }
+                SRow { hub: sp.hub; label: "Language"; hint: "your MangaDex language plus multi-language sources"
+                    Seg { hub: sp.hub; opts: [{ v: "mine", l: "MINE" }, { v: "any", l: "ANY" }]
+                          cur: sp.extLang; onPicked: function (v) { sp.extLang = v; sp.extLimit = 60; sp.refilter() } } }
+                SRow { hub: sp.hub; label: "Search"
                     Rectangle {
-                        width: sp.s(200); height: sp.s(30); radius: sp.s(8)
+                        width: sp.s(200); height: Math.max(sp.s(30), exq.contentHeight + sp.s(16)); radius: sp.s(8)
                         color: Qt.alpha(sp.hub.surface0, 0.6)
-                        border.width: 1; border.color: lr.activeFocus ? sp.hub.pink : Qt.alpha(sp.hub.pink, 0.4)
+                        border.width: 1; border.color: exq.activeFocus ? sp.hub.pink : Qt.alpha(sp.hub.pink, 0.4)
                         TextInput {
-                            id: lr
+                            id: exq
                             anchors.fill: parent; anchors.margins: sp.s(8)
                             verticalAlignment: TextInput.AlignVCenter
                             clip: true
                             color: sp.hub.text
                             selectionColor: Qt.alpha(sp.hub.pink, 0.4)
                             font.family: sp.hub.mono; font.pixelSize: sp.fs(10)
-                            text: sp.hub.cs("local_root", "~/Manga")
-                            onAccepted: sp.hub.setCfg("local_root", text.trim())
+                            onTextChanged: { sp.extQuery = text; sp.extLimit = 60; sp.refilter() }
                             Keys.onEscapePressed: sp.hub.forceActiveFocus()
+                            Text { visible: exq.text === ""; text: "name..."; color: sp.hub.overlay0
+                                   font.family: sp.hub.mono; font.pixelSize: sp.fs(10) }
+                        }
+                    } }
+                Repeater {
+                    model: sp.extShown
+                    delegate: SRow {
+                        required property var modelData
+                        hub: sp.hub
+                        label: modelData.name
+                        hint: modelData.lang.toUpperCase() + (modelData.nsfw ? "  /  NSFW" : "") + sp.extStatus(modelData.id)
+                        Row {
+                            spacing: sp.s(8)
+                            MBtn { hub: sp.hub; label: sp.testing === modelData.id ? "..." : "TEST"; accent: sp.hub.blue
+                                   enabled: sp.testing === ""; onClicked: sp.runTest(modelData.id) }
+                            Tgl { hub: sp.hub; on: modelData.on; onFlipped: sp.toggleExt(modelData.id) }
                         }
                     }
-                    MBtn { hub: sp.hub; label: "APPLY"; accent: sp.hub.green; onClicked: sp.hub.setCfg("local_root", lr.text.trim()) }
                 }
+                Text { visible: sp.extTotal > sp.extShown.length
+                       text: "showing " + sp.extShown.length + " of " + sp.extTotal + ", scroll for more"
+                       color: sp.hub.overlay0; font.family: sp.hub.mono; font.pixelSize: sp.fs(8) }
+
             }
 
-            Sec { hub: sp.hub; title: "APPEARANCE" }
-            SRow { hub: sp.hub; label: "Accent colour"
-                Swatches { hub: sp.hub } }
-            SRow { hub: sp.hub; label: "Text size"; hint: "applies instantly"
-                Seg { hub: sp.hub
-                      opts: [{ v: "1", l: "1X" }, { v: "1.25", l: "1.25X" }, { v: "1.5", l: "1.5X" }, { v: "1.75", l: "1.75X" }, { v: "2", l: "2X" }, { v: "2.5", l: "2.5X" }, { v: "3", l: "3X" }, { v: "3.5", l: "3.5X" }]
-                      cur: String(sp.hub.cn("font_scale", 2)); onPicked: function (v) { sp.hub.setCfg("font_scale", Number(v)) } } }
-            SRow { hub: sp.hub; label: "Panel width"; hint: "needs APPLY below"
-                Sld { hub: sp.hub; from: 600; to: 1700; step: 50; suffix: "px"; value: sp.hub.cn("panel_w", 1200)
-                      onMoved: function (v) { sp.hub.setCfgLocal("panel_w", v) }; onReleased: sp.hub.commitCfg("panel_w") } }
-            SRow { hub: sp.hub; label: "Panel height"; hint: "needs APPLY below"
-                Seg { hub: sp.hub; opts: [{ v: "100", l: "FULL" }, { v: "90", l: "90%" }, { v: "80", l: "80%" }, { v: "70", l: "70%" }]
-                      cur: String(sp.hub.cn("panel_h", 100)); onPicked: function (v) { sp.hub.setCfg("panel_h", Number(v)) } } }
-            SRow { hub: sp.hub; label: "Panel side"; hint: "needs APPLY below"
-                Seg { hub: sp.hub; opts: [{ v: "left", l: "LEFT" }, { v: "right", l: "RIGHT" }]
-                      cur: sp.hub.cs("side", "left"); onPicked: function (v) { sp.hub.setCfg("side", v) } } }
-            SRow { hub: sp.hub; label: "Apply panel layout"; hint: "restarts the panel, about 5 seconds"
-                MBtn { hub: sp.hub; label: "APPLY & RESTART"; accent: sp.hub.green; solid: true; onClicked: sp.hub.applyLayout() } }
-            SRow { hub: sp.hub; label: "Panel opacity"
-                Sld { hub: sp.hub; from: 0.6; to: 1.0; step: 0.02; decimals: 2; value: sp.hub.cn("panel_opacity", 0.95)
-                      onMoved: function (v) { sp.hub.setCfgLocal("panel_opacity", v) }; onReleased: sp.hub.commitCfg("panel_opacity") } }
-            SRow { hub: sp.hub; label: "UI scale"
-                Seg { hub: sp.hub; opts: [{ v: "0.9", l: "90%" }, { v: "1", l: "100%" }, { v: "1.1", l: "110%" }, { v: "1.2", l: "120%" }]
-                      cur: String(sp.hub.cn("ui_scale", 1)); onPicked: function (v) { sp.hub.setCfg("ui_scale", Number(v)) } } }
-            SRow { hub: sp.hub; label: "Card corner radius"
-                Sld { hub: sp.hub; from: 0; to: 20; step: 1; value: sp.hub.cn("card_radius", 10)
-                      onMoved: function (v) { sp.hub.setCfgLocal("card_radius", v) }; onReleased: sp.hub.commitCfg("card_radius") } }
-            SRow { hub: sp.hub; label: "Animation speed"
-                Seg { hub: sp.hub; opts: [{ v: "off", l: "OFF" }, { v: "fast", l: "FAST" }, { v: "normal", l: "NORMAL" }, { v: "slow", l: "SLOW" }]
-                      cur: sp.hub.cs("anim", "normal"); onPicked: function (v) { sp.hub.setCfg("anim", v) } } }
-            SRow { hub: sp.hub; label: "Scan beam"
-                Tgl { hub: sp.hub; on: sp.hub.cb("beam", true); onFlipped: sp.hub.setCfg("beam", !on) } }
-            SRow { hub: sp.hub; label: "Corner brackets"
-                Tgl { hub: sp.hub; on: sp.hub.cb("corners", true); onFlipped: sp.hub.setCfg("corners", !on) } }
-            SRow { hub: sp.hub; label: "Grid overlay"
-                Tgl { hub: sp.hub; on: sp.hub.cb("grid", false); onFlipped: sp.hub.setCfg("grid", !on) } }
+            Column {
+                width: col.width
+                spacing: sp.s(2)
+                visible: sp.page === "appearance"
+                MBtn { hub: sp.hub; label: "< BACK"; accent: sp.hub.yellow; onClicked: sp.page = "" }
+                Sec { hub: sp.hub; title: "APPEARANCE" }
+                SRow { hub: sp.hub; label: "Accent colour"
+                    Swatches { hub: sp.hub } }
+                SRow { hub: sp.hub; label: "Text size"; hint: "applies instantly"
+                    Seg { hub: sp.hub
+                          opts: [{ v: "1", l: "1X" }, { v: "1.25", l: "1.25X" }, { v: "1.5", l: "1.5X" }, { v: "1.75", l: "1.75X" }, { v: "2", l: "2X" }, { v: "2.5", l: "2.5X" }, { v: "3", l: "3X" }, { v: "3.5", l: "3.5X" }]
+                          cur: String(sp.hub.cn("font_scale", 2)); onPicked: function (v) { sp.hub.setCfg("font_scale", Number(v)) } } }
+                SRow { hub: sp.hub; label: "Panel width"; hint: "needs APPLY below"
+                    Sld { hub: sp.hub; from: 600; to: 1700; step: 50; suffix: "px"; value: sp.hub.cn("panel_w", 1200)
+                          onMoved: function (v) { sp.hub.setCfgLocal("panel_w", v) }; onReleased: sp.hub.commitCfg("panel_w") } }
+                SRow { hub: sp.hub; label: "Panel height"; hint: "needs APPLY below"
+                    Seg { hub: sp.hub; opts: [{ v: "100", l: "FULL" }, { v: "90", l: "90%" }, { v: "80", l: "80%" }, { v: "70", l: "70%" }]
+                          cur: String(sp.hub.cn("panel_h", 100)); onPicked: function (v) { sp.hub.setCfg("panel_h", Number(v)) } } }
+                SRow { hub: sp.hub; label: "Panel side"; hint: "needs APPLY below"
+                    Seg { hub: sp.hub; opts: [{ v: "left", l: "LEFT" }, { v: "right", l: "RIGHT" }]
+                          cur: sp.hub.cs("side", "left"); onPicked: function (v) { sp.hub.setCfg("side", v) } } }
+                SRow { hub: sp.hub; label: "Apply panel layout"; hint: "restarts the panel, about 5 seconds"
+                    MBtn { hub: sp.hub; label: "APPLY & RESTART"; accent: sp.hub.green; solid: true; onClicked: sp.hub.applyLayout() } }
+                SRow { hub: sp.hub; label: "Panel opacity"
+                    Sld { hub: sp.hub; from: 0.6; to: 1.0; step: 0.02; decimals: 2; value: sp.hub.cn("panel_opacity", 0.95)
+                          onMoved: function (v) { sp.hub.setCfgLocal("panel_opacity", v) }; onReleased: sp.hub.commitCfg("panel_opacity") } }
+                SRow { hub: sp.hub; label: "UI scale"
+                    Seg { hub: sp.hub; opts: [{ v: "0.9", l: "90%" }, { v: "1", l: "100%" }, { v: "1.1", l: "110%" }, { v: "1.2", l: "120%" }]
+                          cur: String(sp.hub.cn("ui_scale", 1)); onPicked: function (v) { sp.hub.setCfg("ui_scale", Number(v)) } } }
+                SRow { hub: sp.hub; label: "Card corner radius"
+                    Sld { hub: sp.hub; from: 0; to: 20; step: 1; value: sp.hub.cn("card_radius", 10)
+                          onMoved: function (v) { sp.hub.setCfgLocal("card_radius", v) }; onReleased: sp.hub.commitCfg("card_radius") } }
+                SRow { hub: sp.hub; label: "Animation speed"
+                    Seg { hub: sp.hub; opts: [{ v: "off", l: "OFF" }, { v: "fast", l: "FAST" }, { v: "normal", l: "NORMAL" }, { v: "slow", l: "SLOW" }]
+                          cur: sp.hub.cs("anim", "normal"); onPicked: function (v) { sp.hub.setCfg("anim", v) } } }
+                SRow { hub: sp.hub; label: "Scan beam"
+                    Tgl { hub: sp.hub; on: sp.hub.cb("beam", true); onFlipped: sp.hub.setCfg("beam", !on) } }
+                SRow { hub: sp.hub; label: "Corner brackets"
+                    Tgl { hub: sp.hub; on: sp.hub.cb("corners", true); onFlipped: sp.hub.setCfg("corners", !on) } }
+                SRow { hub: sp.hub; label: "Grid overlay"
+                    Tgl { hub: sp.hub; on: sp.hub.cb("grid", false); onFlipped: sp.hub.setCfg("grid", !on) } }
 
-            Sec { hub: sp.hub; title: "DATA" }
-            SRow { hub: sp.hub; label: "Offline downloads"; hint: sp.hub.sizes.dl + " on disk"
-                MBtn { hub: sp.hub; accent: sp.hub.red; solid: sp.confirm === "dl"
-                       label: sp.confirm === "dl" ? "CONFIRM CLEAR" : "CLEAR"
-                       onClicked: sp.ask("dl", function () { sp.hub.wipe("downloads") }) } }
-            SRow { hub: sp.hub; label: "Cache"; hint: sp.hub.sizes.cache + " (archive pages, chapter lists)"
-                MBtn { hub: sp.hub; accent: sp.hub.red; solid: sp.confirm === "cache"
-                       label: sp.confirm === "cache" ? "CONFIRM CLEAR" : "CLEAR"
-                       onClicked: sp.ask("cache", function () { sp.hub.wipe("cache") }) } }
-            SRow { hub: sp.hub; label: "Data folder"; hint: "library.json, downloads"
-                MBtn { hub: sp.hub; accent: sp.hub.blue; label: "OPEN"
-                       onClicked: Quickshell.execDetached(["xdg-open", sp.hub.home + "/.local/share/qs-manga"]) } }
-            SRow { hub: sp.hub; label: "Reset all settings"; hint: "library and progress are kept"
-                MBtn { hub: sp.hub; accent: sp.hub.red; solid: sp.confirm === "reset"
-                       label: sp.confirm === "reset" ? "CONFIRM RESET" : "RESET"
-                       onClicked: sp.ask("reset", function () { sp.hub.resetCfg() }) } }
+            }
+
+            Column {
+                width: col.width
+                spacing: sp.s(2)
+                visible: sp.page === "data"
+                MBtn { hub: sp.hub; label: "< BACK"; accent: sp.hub.yellow; onClicked: sp.page = "" }
+                Sec { hub: sp.hub; title: "DATA" }
+                SRow { hub: sp.hub; label: "Offline downloads"; hint: sp.hub.sizes.dl + " on disk"
+                    MBtn { hub: sp.hub; accent: sp.hub.red; solid: sp.confirm === "dl"
+                           label: sp.confirm === "dl" ? "CONFIRM CLEAR" : "CLEAR"
+                           onClicked: sp.ask("dl", function () { sp.hub.wipe("downloads") }) } }
+                SRow { hub: sp.hub; label: "Cache"; hint: sp.hub.sizes.cache + " (archive pages, chapter lists)"
+                    MBtn { hub: sp.hub; accent: sp.hub.red; solid: sp.confirm === "cache"
+                           label: sp.confirm === "cache" ? "CONFIRM CLEAR" : "CLEAR"
+                           onClicked: sp.ask("cache", function () { sp.hub.wipe("cache") }) } }
+                SRow { hub: sp.hub; label: "Data folder"; hint: "library.json, downloads"
+                    MBtn { hub: sp.hub; accent: sp.hub.blue; label: "OPEN"
+                           onClicked: Quickshell.execDetached(["xdg-open", sp.hub.home + "/.local/share/qs-manga"]) } }
+                SRow { hub: sp.hub; label: "Reset all settings"; hint: "library and progress are kept"
+                    MBtn { hub: sp.hub; accent: sp.hub.red; solid: sp.confirm === "reset"
+                           label: sp.confirm === "reset" ? "CONFIRM RESET" : "RESET"
+                           onClicked: sp.ask("reset", function () { sp.hub.resetCfg() }) } }
+            }
+
             Item { width: 1; height: sp.s(10) }
-            Text { text: "MANGA//DECK  /  " + sp.hub.sources.length + " SOURCES  /  KEYS: ESC CLOSE, M MODE, N P CHAPTERS"
+            Text { visible: sp.page === ""; text: "MANGA//DECK  /  " + sp.hub.sources.length + " SOURCES  /  KEYS: ESC CLOSE, M MODE, N P CHAPTERS"
                    color: sp.hub.overlay0; font.family: sp.hub.mono; font.pixelSize: sp.fs(8); font.letterSpacing: sp.s(1) }
         }
     }

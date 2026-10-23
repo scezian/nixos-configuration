@@ -51,6 +51,17 @@ Item {
     // ---------------- state
     property bool shown: false
     property string tab: "library"
+    property string query: ""
+    property var groups: {
+        if (src !== "all") return []
+        var g = [], idx = ({})
+        for (var i = 0; i < results.length; i++) {
+            var nm = results[i].srcName || results[i].src || "?"
+            if (idx[nm] === undefined) { idx[nm] = g.length; g.push({ name: nm, items: [] }) }
+            g[idx[nm]].items.push(results[i])
+        }
+        return g
+    }
     property bool firstLib: true
     property string src: "md"
     property string kind: "all"
@@ -90,11 +101,20 @@ Item {
     property int rStart: 0
     property bool rLoading: false
     property var pagesCmd: []
+    property var rEnh: ({})
+    property var enhCmd: []
+    property bool enhAgain: false
     property int pgPending: -1
     property string toastText: ""
 
     // ---------------- helpers
     function parse(txt, fallback) { try { return JSON.parse(txt) } catch (e) { return fallback } }
+    function refreshSources() { sourcesProc.running = true }
+    function srcLabel() {
+        if (src === "all") return "ALL SOURCES"
+        for (var i = 0; i < sources.length; i++) if (sources[i].id === src) return sources[i].name.toUpperCase()
+        return String(src).toUpperCase()
+    }
     function toast(msg) { toastText = msg; toastT.restart() }
     function modeFor(kind) {
         var m = cfg["mode_" + kind]
@@ -172,8 +192,9 @@ Item {
     }
     function loadList() {
         if (listProc.running) { listAgain = true; return }
-        var q = searchBox.text.trim()
+        var q = root.query
         listErr = ""
+        if (src === "all" && q.length < 2) { results = []; loading = false; listErr = "TYPE 2+ LETTERS TO SEARCH ALL ENABLED SOURCES"; return }
         loading = true
         listCmd = q.length >= 2 ? ["python3", script, "search", src, kind, q]
                                 : ["python3", script, "browse", src, kind, sort]
@@ -210,6 +231,20 @@ Item {
             if (chapters[i].id === mstate.last.chapter_id) return i
         return -1
     }
+    function jumpToChapter(txt) {
+        var t = parseFloat(String(txt).replace(",", "."))
+        if (isNaN(t) || chapters.length === 0) { toast("TYPE A CHAPTER NUMBER"); return }
+        var best = -1, bd = 1e9
+        for (var i = 0; i < chapters.length; i++) {
+            var n = parseFloat(chapters[i].num)
+            if (isNaN(n)) continue
+            var d = Math.abs(n - t)
+            if (d < bd) { bd = d; best = i }
+        }
+        if (best < 0) { toast("NO NUMBERED CHAPTERS"); return }
+        if (bd > 0) toast("CH " + t + " NOT FOUND, OPENING CH " + chapters[best].num)
+        openChapter(best, 0)
+    }
     function startReading() {
         var i = continueIdx()
         if (i >= 0) openChapter(i, mstate.last.page || 0)
@@ -230,12 +265,23 @@ Item {
         rch = chapters[i]
         rStart = page || 0
         rpages = []
+        rEnh = ({})
+        stopEnhance()
         rLoading = true
         readerOpen = true
         autoAdd()
         pagesCmd = ["python3", script, "pages", rch.id].concat(cfg.saver === true ? ["saver"] : [])
         pagesProc.running = true
     }
+    function startEnhance() {
+        if (!readerOpen || !rch || rpages.length === 0) return
+        if (cb("enhance", true) === false || cfg.saver === true) return
+        if (enhProc.running) { enhAgain = true; enhProc.running = false; return }
+        rEnh = ({})
+        enhCmd = ["python3", script, "enhance", rch.id, String(reader.enhW()), String(rStart)]
+        enhProc.running = true
+    }
+    function stopEnhance() { enhAgain = false; if (enhProc.running) enhProc.running = false }
     function stepChapter(d) {
         flushProgress()
         var ni = rIdx + d
@@ -245,6 +291,8 @@ Item {
     function closeReader() {
         flushProgress()
         readerOpen = false
+        stopEnhance()
+        rEnh = ({})
         rpages = []
         libRefresh.restart()
         root.forceActiveFocus()
@@ -336,6 +384,7 @@ Item {
     Keys.onPressed: function (e) {
         if (e.key === Qt.Key_Escape) {
             if (root.detailOpen) root.detailOpen = false
+            else if (root.tab === "settings" && settingsPage.back()) { }
             else Quickshell.execDetached(["bash", root.home + "/.config/hypr/scripts/qs_manager.sh", "close"])
         }
     }
@@ -345,7 +394,7 @@ Item {
         id: sourcesProc
         command: ["python3", root.script, "sources"]
         stdout: StdioCollector {
-            onStreamFinished: { var d = root.parse(text, null); if (Array.isArray(d) && d.length > 0) root.sources = d }
+            onStreamFinished: { var d = root.parse(text, null); if (Array.isArray(d) && d.length > 0) { root.sources = d; var okS = false; for (var si = 0; si < d.length; si++) if (d[si].id === root.src) okS = true; if (!okS) root.src = "md" } }
         }
     }
     Process {
@@ -453,13 +502,29 @@ Item {
             onStreamFinished: {
                 var d = root.parse(text, null)
                 root.rLoading = false
-                if (Array.isArray(d) && d.length > 0) root.rpages = d
+                if (Array.isArray(d) && d.length > 0) { root.rpages = d; Qt.callLater(root.startEnhance) }
                 else {
                     root.toast(d && d.error ? String(d.error) : "NO PAGES RETURNED")
                     root.closeReader()
                 }
             }
         }
+    }
+
+    Process {
+        id: enhProc
+        command: root.enhCmd
+        stdout: SplitParser {
+            onRead: function (line) {
+                if (line.charAt(0) !== "E" || !root.rch) return
+                var p = line.split("\t")
+                if (p.length < 4 || p[1] !== root.rch.id) return
+                var m = Object.assign({}, root.rEnh)
+                m[p[2]] = p[3]
+                root.rEnh = m
+            }
+        }
+        onExited: if (root.enhAgain) { root.enhAgain = false; root.startEnhance() }
     }
 
     // ---------------- reusable card
@@ -649,7 +714,48 @@ Item {
             // ---------- discover
             Item {
                 anchors.fill: parent
+                id: discoverRoot
+                property bool srcOpen: false
                 visible: root.tab === "discover"
+                onVisibleChanged: if (!visible) srcOpen = false
+                MouseArea { anchors.fill: parent; z: 18; visible: discoverRoot.srcOpen; onClicked: discoverRoot.srcOpen = false }
+                Rectangle {
+                    id: srcPop
+                    z: 20
+                    visible: discoverRoot.srcOpen
+                    width: Math.min(discoverRoot.width, root.s(420))
+                    height: Math.min(lvSrc.contentHeight + root.s(12), root.s(360), discoverRoot.height - y - root.s(8))
+                    radius: root.s(10)
+                    color: root.crust
+                    border.width: 1; border.color: root.peach
+                    clip: true
+                    ListView {
+                        id: lvSrc
+                        anchors.fill: parent; anchors.margins: root.s(6)
+                        clip: true
+                        spacing: root.s(3)
+                        boundsBehavior: Flickable.StopAtBounds
+                        model: [{ id: "all", name: "All enabled sources (global search)" }].concat(root.sources)
+                        delegate: Rectangle {
+                            id: opt
+                            required property var modelData
+                            readonly property bool on: root.src === modelData.id
+                            width: ListView.view.width; height: root.s(34); radius: root.s(7)
+                            color: on ? Qt.alpha(root.peach, 0.25) : (oma.containsMouse ? Qt.alpha(root.surface1, 0.6) : "transparent")
+                            Text {
+                                anchors { left: parent.left; leftMargin: root.s(12); right: parent.right; rightMargin: root.s(12); verticalCenter: parent.verticalCenter }
+                                elide: Text.ElideRight
+                                text: opt.modelData.name
+                                color: opt.on ? root.peach : root.text
+                                font.family: root.mono; font.pixelSize: root.fs(10); font.bold: true
+                            }
+                            MouseArea {
+                                id: oma; anchors.fill: parent; hoverEnabled: true
+                                onClicked: { root.src = opt.modelData.id; discoverRoot.srcOpen = false; root.loadList() }
+                            }
+                        }
+                    }
+                }
 
                 Column {
                     id: ctl
@@ -669,25 +775,27 @@ Item {
                             selectionColor: Qt.alpha(root.pink, 0.4)
                             font.family: root.mono; font.pixelSize: root.fs(13)
                             clip: true
-                            onTextChanged: searchT.restart()
-                            onAccepted: root.loadList()
+                            onTextChanged: if (text.trim() === "" && root.query !== "") { root.query = ""; searchT.restart() }
+                            onAccepted: { root.query = text.trim(); root.loadList() }
                             Keys.onEscapePressed: { text = ""; root.forceActiveFocus() }
-                            Text { visible: searchBox.text === ""; text: "search titles..."; color: root.overlay0
+                            Text { visible: searchBox.text === ""; text: "type, then press Enter..."; color: root.overlay0
                                    font.family: root.mono; font.pixelSize: root.fs(13) }
                         }
                     }
                     Flow {
                         width: parent.width
                         spacing: root.s(6)
-                        Repeater {
-                            model: root.sources
-                            delegate: MBtn {
-                                required property var modelData
-                                hub: root; height: root.s(28)
-                                label: modelData.name.toUpperCase()
-                                accent: root.peach
-                                solid: root.src === modelData.id
-                                onClicked: { root.src = modelData.id; root.loadList() }
+                        MBtn {
+                            id: srcBtn
+                            hub: root; height: root.s(28)
+                            label: "SOURCE: " + root.srcLabel() + "  v"
+                            accent: root.peach
+                            solid: discoverRoot.srcOpen
+                            onClicked: {
+                                var p = srcBtn.mapToItem(discoverRoot, 0, srcBtn.height)
+                                srcPop.x = p.x
+                                srcPop.y = p.y + root.s(4)
+                                discoverRoot.srcOpen = !discoverRoot.srcOpen
                             }
                         }
                         Repeater {
@@ -716,9 +824,10 @@ Item {
                 }
                 GridView {
                     id: resGrid
+                    visible: root.src !== "all"
                     anchors { left: parent.left; right: parent.right; top: ctl.bottom; bottom: parent.bottom; topMargin: root.s(10) }
                     clip: true
-                    model: root.results
+                    model: root.src === "all" ? [] : root.results
                     cellWidth: Math.floor(width / root.cn("cols", 3))
                     cellHeight: cellWidth * 1.5 + root.s(52)
                     boundsBehavior: Flickable.StopAtBounds
@@ -735,7 +844,60 @@ Item {
                         }
                     }
                 }
-                MScroll { hub: root; target: resGrid; anchors { right: resGrid.right; top: resGrid.top; bottom: resGrid.bottom } }
+                MScroll { hub: root; shown: root.src !== "all"; target: resGrid; anchors { right: resGrid.right; top: resGrid.top; bottom: resGrid.bottom } }
+                ListView {
+                    id: grpList
+                    anchors { left: parent.left; right: parent.right; top: ctl.bottom; bottom: parent.bottom; topMargin: root.s(10) }
+                    visible: root.src === "all"
+                    clip: true
+                    spacing: root.s(16)
+                    boundsBehavior: Flickable.StopAtBounds
+                    model: root.groups
+                    delegate: Column {
+                        id: grp
+                        required property var modelData
+                        property bool expanded: false
+                        readonly property int cols: root.cn("cols", 3)
+                        readonly property real cw: Math.floor(width / cols)
+                        readonly property int cap: cols * 2
+                        width: grpList.width - root.s(22)
+                        spacing: root.s(6)
+                        Row {
+                            spacing: root.s(12)
+                            Text { text: grp.modelData.name.toUpperCase(); color: root.peach
+                                   font.family: root.mono; font.pixelSize: root.fs(12); font.bold: true; font.letterSpacing: root.s(2) }
+                            Text { text: grp.modelData.items.length + " RESULTS"; color: root.overlay0
+                                   font.family: root.mono; font.pixelSize: root.fs(9) }
+                        }
+                        Rectangle { width: parent.width; height: 1; color: Qt.alpha(root.peach, 0.35) }
+                        Flow {
+                            width: parent.width
+                            Repeater {
+                                model: grp.expanded ? grp.modelData.items : grp.modelData.items.slice(0, grp.cap)
+                                delegate: Item {
+                                    required property var modelData
+                                    width: grp.cw
+                                    height: grp.cw * 1.5 + root.s(52)
+                                    MangaCard {
+                                        anchors.fill: parent
+                                        anchors.margins: root.s(6)
+                                        hub: root
+                                        item: modelData
+                                        onClicked: root.openManga(modelData)
+                                    }
+                                }
+                            }
+                        }
+                        MBtn {
+                            visible: grp.modelData.items.length > grp.cap
+                            hub: root
+                            label: grp.expanded ? "SHOW LESS" : "SHOW ALL " + grp.modelData.items.length
+                            accent: root.peach
+                            onClicked: grp.expanded = !grp.expanded
+                        }
+                    }
+                }
+                MScroll { hub: root; shown: root.src === "all"; target: grpList; anchors { right: grpList.right; top: grpList.top; bottom: grpList.bottom } }
                 Text {
                     anchors.centerIn: resGrid
                     visible: root.loading || root.listErr !== ""
@@ -751,6 +913,7 @@ Item {
             }
 
             SettingsPage {
+                id: settingsPage
                 anchors.fill: parent
                 hub: root
                 visible: root.tab === "settings"
@@ -834,7 +997,28 @@ Item {
                     Text { anchors.verticalCenter: parent.verticalCenter
                            text: "CHAPTERS  " + root.chapters.length; color: root.pink
                            font.family: root.mono; font.pixelSize: root.fs(11); font.bold: true; font.letterSpacing: root.s(2) }
-                    MBtn { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                    Rectangle {
+                        anchors { right: orderBtn.left; rightMargin: root.s(8); verticalCenter: parent.verticalCenter }
+                        width: root.s(170); height: root.s(26); radius: root.s(7)
+                        color: Qt.alpha(root.surface0, 0.6)
+                        border.width: 1
+                        border.color: jumpIn.activeFocus ? root.pink : Qt.alpha(root.mauve, 0.4)
+                        TextInput {
+                            id: jumpIn
+                            anchors.fill: parent; anchors.margins: root.s(6)
+                            verticalAlignment: TextInput.AlignVCenter
+                            clip: true
+                            color: root.text
+                            selectionColor: Qt.alpha(root.pink, 0.4)
+                            font.family: root.mono; font.pixelSize: root.fs(10)
+                            validator: RegularExpressionValidator { regularExpression: /[0-9]*[.,]?[0-9]*/ }
+                            onAccepted: { root.jumpToChapter(text); text = ""; root.forceActiveFocus() }
+                            Keys.onEscapePressed: { text = ""; root.forceActiveFocus() }
+                            Text { visible: jumpIn.text === ""; text: "jump to ch #"; color: root.overlay0
+                                   font.family: root.mono; font.pixelSize: root.fs(9) }
+                        }
+                    }
+                    MBtn { id: orderBtn; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                            hub: root; height: root.s(26); label: root.chRev ? "NEWEST FIRST" : "OLDEST FIRST"; accent: root.mauve
                            onClicked: root.chRev = !root.chRev }
                 }
@@ -854,7 +1038,7 @@ Item {
                         readonly property bool isDl: !!root.dlSet[modelData.id]
                         readonly property bool isBusy: !!root.dlBusy[modelData.id]
                         readonly property bool canDl: modelData.id.indexOf("md:") === 0
-                        width: ListView.view.width
+                        width: ListView.view.width - root.s(22)
                         height: root.s(44)
                         radius: root.s(8)
                         color: cma2.containsMouse ? Qt.alpha(root.surface1, 0.5) : (isCur ? Qt.alpha(root.pink, 0.10) : Qt.alpha(root.surface0, 0.35))
@@ -884,7 +1068,7 @@ Item {
                         Row {
                             anchors { right: parent.right; rightMargin: root.s(10); verticalCenter: parent.verticalCenter }
                             spacing: root.s(8)
-                            Text { anchors.verticalCenter: parent.verticalCenter; text: cr.modelData.pages + " P"; color: root.overlay0
+                            Text { visible: Number(cr.modelData.pages) > 0; anchors.verticalCenter: parent.verticalCenter; text: cr.modelData.pages + " P"; color: root.overlay0
                                    font.family: root.mono; font.pixelSize: root.fs(9) }
                             MBtn {
                                 visible: cr.canDl
@@ -924,6 +1108,7 @@ Item {
             saver: root.cfg.saver === true
             scrollStep: root.cn("scroll_step", 160)
             stripWidth: root.cn("strip_width", 100) / 100
+            enh: root.rEnh
             autoNext: root.cb("auto_next", true)
             bgMode: root.cs("reader_bg", "theme")
             onCloseRequested: root.closeReader()

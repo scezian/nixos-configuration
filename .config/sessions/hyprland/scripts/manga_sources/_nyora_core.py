@@ -1,7 +1,7 @@
 # Nyora source: any of Nyora's ~390 sources through the local helper (auto-started).
 # Config (optional): ~/.local/share/qs-manga/nyora.json
 #   {"source": "COMICK_FUN", "lang": "english", "nsfw": false}
-import glob, json, os, socket, subprocess, sys, time, urllib.parse, urllib.request
+import glob, json, os, socket, subprocess, sys, time, urllib.parse, urllib.request, urllib.error
 
 H = os.path.expanduser("~")
 PORTF = H + "/.config/nyora/helper.port"
@@ -62,7 +62,7 @@ def _jar():
     return j[0]
 
 
-def _base():
+def _base_unlocked():
     p = _port()
     if not (p and _alive(p)):
         jar = _jar()
@@ -264,3 +264,158 @@ class Source:
         d = _get("/manga/pages", id=s, url=url, branch=br or None)
         ps = d.get("pages", []) if isinstance(d, dict) else d
         return [p["url"] if isinstance(p, dict) else p for p in ps]
+
+
+# ------------------------------------------------------------ extensions manager
+LEGACY = {"ASURASCANS": ("NYORA_ASURA", "Asura Scans"), "FLAMECOMICS": ("NYORA_FLAME", "Flame Comics")}
+DEFAULT_ON = "ASURASCANS,FLAMECOMICS"
+SRCCACHE = H + "/.cache/qs-manga/nyora_sources.json"
+HEALTH = H + "/.cache/qs-manga/nyora_health.json"
+
+
+def _jload(p, d):
+    try:
+        return json.load(open(p))
+    except Exception:
+        return d
+
+
+def _jsave(p, v):
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p + ".tmp", "w") as f:
+        json.dump(v, f)
+    os.replace(p + ".tmp", p)
+
+
+def enabled():
+    v = _settings().get("nyora_on")
+    if v is None:
+        v = DEFAULT_ON
+    return [x for x in str(v).split(",") if x]
+
+
+def _sid_to_raw(sid):
+    for raw, (s, _n) in LEGACY.items():
+        if s == sid:
+            return raw
+    return sid[len("NYORA_"):]
+
+
+def _new(raw, names, hidden):
+    sid, nm = LEGACY.get(raw, ("NYORA_" + raw, names.get(raw) or raw.replace("_", " ").title()))
+    s = Source()
+    s.ID, s.NAME, s.SRC, s.HIDDEN = sid, nm, raw, hidden
+    return s
+
+
+def make_sources():
+    names = {e["id"]: e["name"] for e in _jload(SRCCACHE, {}).get("sources", [])}
+    out, seen = [], set()
+    for raw in enabled():
+        s = _new(raw, names, False)
+        if s.ID not in seen:
+            out.append(s)
+            seen.add(s.ID)
+    # sources still referenced by the library stay registered (hidden) so saved titles keep working
+    try:
+        lib = json.load(open(LIB)).get("manga", {})
+    except Exception:
+        lib = {}
+    for k in lib:
+        sid = k.split(":", 1)[0]
+        if k.startswith("NYORA_") and sid not in seen:
+            s = _new(_sid_to_raw(sid), names, True)
+            s.ID = sid
+            out.append(s)
+            seen.add(sid)
+    return out
+
+
+def _cli_list(refresh):
+    c = _jload(SRCCACHE, {})
+    fresh = bool(c.get("sources")) and time.time() - c.get("ts", 0) < 7 * 86400
+    if refresh or not fresh:
+        try:
+            d = _get("/sources")
+        except Exception as e:
+            if not c.get("sources"):
+                return {"error": str(e)[:80]}
+            d = None
+        if d is not None:
+            es = d.get("sources", d.get("entries", [])) if isinstance(d, dict) else d
+            lst = []
+            for e in es:
+                i = str(e.get("id", ""))
+                if not i.startswith("parser:") or e.get("is_obsolete") or e.get("isObsolete"):
+                    continue
+                lst.append({"id": i[7:], "name": e.get("name") or i[7:], "lang": str(e.get("lang") or "all"),
+                            "nsfw": bool(e.get("is_nsfw") or e.get("isNsfw"))})
+            c = {"ts": time.time(), "sources": lst}
+            _jsave(SRCCACHE, c)
+    on = set(enabled())
+    return {"sources": [dict(e, on=e["id"] in on) for e in c.get("sources", [])], "health": _jload(HEALTH, {})}
+
+
+def _cli_toggle(raw, load, save):
+    cur = enabled()
+    if raw in cur:
+        cur.remove(raw)
+    else:
+        cur.append(raw)
+    d = load()
+    d["settings"]["nyora_on"] = ",".join(cur)
+    save(d)
+    return {"id": raw, "on": raw in cur}
+
+
+def _cli_test(raw):
+    def done(ok, detail):
+        h = _jload(HEALTH, {})
+        h[raw] = {"ok": ok, "detail": detail, "ts": time.time()}
+        _jsave(HEALTH, h)
+        return {"id": raw, "ok": ok, "detail": detail}
+    try:
+        d = _get("/sources/popular", id=raw, page=1)
+        es = d.get("entries", []) if isinstance(d, dict) else d
+        if not es:
+            return done(False, "empty list")
+        chap = None
+        for e in es[:4]:
+            chs = _get("/manga/details", id=raw, url=e.get("url")).get("chapters") or []
+            if chs:
+                chap = chs[0]
+                break
+        if chap is None:
+            return done(False, "no chapters")
+        pg = _get("/manga/pages", id=raw, url=chap.get("url"), branch=chap.get("branch") or None)
+        ps = pg.get("pages", []) if isinstance(pg, dict) else pg
+        if not ps:
+            return done(False, "no pages")
+        u = ps[0]["url"] if isinstance(ps[0], dict) else ps[0]
+        try:
+            with urllib.request.urlopen(u, timeout=25) as r:
+                n = len(r.read(200000))
+        except urllib.error.HTTPError as e:
+            return done(False, "image HTTP %d" % e.code)
+        return done(n > 1000, "ok" if n > 1000 else "image empty")
+    except Exception as e:
+        return done(False, str(e)[:60])
+
+
+def cli(cmd, r, load, save):
+    if cmd == "list":
+        return _cli_list(bool(r) and r[0] == "refresh")
+    if cmd == "toggle" and r:
+        return _cli_toggle(r[0], load, save)
+    if cmd == "test" and r:
+        return _cli_test(r[0])
+    return {"error": "bad nyora command"}
+
+
+import threading
+_LOCK = threading.Lock()
+
+
+def _base():
+    with _LOCK:
+        return _base_unlocked()
