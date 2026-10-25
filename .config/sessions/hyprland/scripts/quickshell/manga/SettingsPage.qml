@@ -105,6 +105,34 @@ Item {
         }
     }
 
+    // ---------------- downloads monitor
+    property var dlItems: []
+    property var dlSummary: ({})
+    readonly property var dlActive: dlItems.filter(function (e) { return e.status === "running" || e.status === "queued" })
+    readonly property var dlFailed: dlItems.filter(function (e) { return e.status === "error" })
+    function dlName(e) {
+        var n = e.manga ? e.manga : "unknown title"
+        if (e.num !== undefined && e.num !== null && e.num !== "") n += "  /  CH " + e.num
+        return n
+    }
+    function loadDl() {
+        if (dlInfoProc.running) return
+        dlInfoProc.command = ["python3", hub.script, "dl-info"]
+        dlInfoProc.running = true
+    }
+    function gotDl(t) {
+        var d = hub.parse(t, null)
+        if (!d || !Array.isArray(d.items)) return
+        dlItems = d.items
+        dlSummary = d.summary || ({})
+    }
+    function dlRetry(ids) { Quickshell.execDetached(["python3", hub.script, "dl-retry"].concat(ids)); dlRefreshT.restart() }
+    function dlRemove(cid) { Quickshell.execDetached(["python3", hub.script, "dl-rm", cid]); dlRefreshT.restart(); hub.refreshDl() }
+    function dlClearFailed() { Quickshell.execDetached(["python3", hub.script, "dl-clear-failed"]); dlRefreshT.restart(); hub.refreshDl() }
+    Process { id: dlInfoProc; stdout: StdioCollector { onStreamFinished: sp.gotDl(text) } }
+    Timer { id: dlRefreshT; interval: 700; onTriggered: sp.loadDl() }
+    Timer { interval: 1200; repeat: true; running: sp.visible && sp.page === "downloads"; triggeredOnStart: true; onTriggered: sp.loadDl() }
+
     component Sec: Item {
         id: sc
         property var hub: null
@@ -311,6 +339,7 @@ Item {
                             { k: "library", l: "LIBRARY", d: "sort, grid columns, badges, chapter order" },
                             { k: "sources", l: "SOURCES", d: "defaults, language, content filters, local folder" },
                             { k: "appearance", l: "APPEARANCE", d: "colour, text size, panel layout, effects" },
+                            { k: "downloads", l: "DOWNLOADS", d: "queue, progress, errors" },
                             { k: "data", l: "DATA", d: "downloads, cache, reset" }]
                     delegate: Rectangle {
                         id: cat
@@ -566,6 +595,85 @@ Item {
                     MBtn { hub: sp.hub; accent: sp.hub.red; solid: sp.confirm === "reset"
                            label: sp.confirm === "reset" ? "CONFIRM RESET" : "RESET"
                            onClicked: sp.ask("reset", function () { sp.hub.resetCfg() }) } }
+            }
+
+            Column {
+                width: col.width
+                spacing: sp.s(6)
+                visible: sp.page === "downloads"
+                MBtn { hub: sp.hub; label: "< BACK"; accent: sp.hub.yellow; onClicked: sp.page = "" }
+                Sec { hub: sp.hub; title: "DOWNLOADS" }
+                SRow { hub: sp.hub; label: "Queue"; hint: sp.dlActive.length > 0 ? "downloading in the background" : "idle"
+                    Text { text: "ACTIVE " + sp.dlActive.length + "    FAILED " + sp.dlFailed.length + "    DONE " + (sp.dlSummary.done || 0)
+                           color: sp.hub.text; font.family: sp.hub.mono; font.pixelSize: sp.fs(10); font.bold: true } }
+                SRow { hub: sp.hub; visible: sp.dlFailed.length > 0; label: "Failed downloads"; hint: "retry keeps pages already saved"
+                    Row {
+                        spacing: sp.s(8)
+                        MBtn { hub: sp.hub; label: "RETRY ALL"; accent: sp.hub.green
+                               onClicked: sp.dlRetry(sp.dlFailed.map(function (e) { return e.cid })) }
+                        MBtn { hub: sp.hub; label: "CLEAR"; accent: sp.hub.red; onClicked: sp.dlClearFailed() }
+                    } }
+                Text { visible: sp.dlActive.length === 0 && sp.dlFailed.length === 0
+                       width: col.width; wrapMode: Text.Wrap
+                       text: "NOTHING DOWNLOADING. USE DOWNLOAD ON A TITLE PAGE."
+                       color: sp.hub.overlay0; font.family: sp.hub.mono; font.pixelSize: sp.fs(9); font.letterSpacing: sp.s(1) }
+                Sec { hub: sp.hub; visible: sp.dlActive.length > 0; title: "IN PROGRESS" }
+                Repeater {
+                    model: sp.dlActive
+                    delegate: Rectangle {
+                        id: arow
+                        required property var modelData
+                        readonly property real frac: modelData.total > 0 ? Math.min(1, modelData.done / modelData.total) : 0
+                        width: col.width
+                        height: acol.height + sp.s(22)
+                        radius: sp.s(8)
+                        color: Qt.alpha(sp.hub.surface0, 0.35)
+                        Column {
+                            id: acol
+                            x: sp.s(14); y: sp.s(11)
+                            width: parent.width - sp.s(28)
+                            spacing: sp.s(6)
+                            Text { width: parent.width; elide: Text.ElideRight; text: sp.dlName(arow.modelData); color: sp.hub.text
+                                   font.family: sp.hub.mono; font.pixelSize: sp.fs(10); font.bold: true }
+                            Rectangle {
+                                width: parent.width; height: sp.s(6); radius: sp.s(3); color: sp.hub.surface1
+                                Rectangle { width: parent.width * arow.frac; height: parent.height; radius: parent.radius; color: sp.hub.sapphire }
+                            }
+                            Text { text: arow.modelData.status === "running" ? "DOWNLOADING  " + arow.modelData.done + " / " + arow.modelData.total + " PAGES" : "WAITING IN QUEUE"
+                                   color: sp.hub.subtext0; font.family: sp.hub.mono; font.pixelSize: sp.fs(8) }
+                        }
+                    }
+                }
+                Sec { hub: sp.hub; visible: sp.dlFailed.length > 0; title: "FAILED" }
+                Repeater {
+                    model: sp.dlFailed
+                    delegate: Rectangle {
+                        id: frow
+                        required property var modelData
+                        width: col.width
+                        height: fcol.height + sp.s(22)
+                        radius: sp.s(8)
+                        color: Qt.alpha(sp.hub.red, 0.08)
+                        border.width: 1; border.color: Qt.alpha(sp.hub.red, 0.4)
+                        Column {
+                            id: fcol
+                            x: sp.s(14); y: sp.s(11)
+                            width: parent.width - sp.s(28)
+                            spacing: sp.s(6)
+                            Text { width: parent.width; elide: Text.ElideRight; text: sp.dlName(frow.modelData); color: sp.hub.text
+                                   font.family: sp.hub.mono; font.pixelSize: sp.fs(10); font.bold: true }
+                            Text { width: parent.width; wrapMode: Text.Wrap; text: frow.modelData.error || "Unknown error"
+                                   color: sp.hub.red; font.family: sp.hub.mono; font.pixelSize: sp.fs(9) }
+                            Text { visible: frow.modelData.total > 0; text: frow.modelData.done + " OF " + frow.modelData.total + " PAGES SAVED"
+                                   color: sp.hub.subtext0; font.family: sp.hub.mono; font.pixelSize: sp.fs(8) }
+                            Row {
+                                spacing: sp.s(8)
+                                MBtn { hub: sp.hub; label: "RETRY"; accent: sp.hub.green; onClicked: sp.dlRetry([frow.modelData.cid]) }
+                                MBtn { hub: sp.hub; label: "REMOVE"; accent: sp.hub.red; onClicked: sp.dlRemove(frow.modelData.cid) }
+                            }
+                        }
+                    }
+                }
             }
 
             Item { width: 1; height: sp.s(10) }

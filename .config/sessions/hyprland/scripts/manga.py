@@ -441,58 +441,341 @@ def dl_dir(rest):
 
 def cmd_pages(cid, saver):
     src, rest = split(cid)
-    if src == "md":
-        d = dl_dir(rest)
-        if os.path.exists(os.path.join(d, ".done")):
-            return [furl(os.path.join(d, f)) for f in sorted(os.listdir(d)) if f.lower().endswith(IMG_EXT)]
+    d = dl_dir_cid(cid)
+    if os.path.exists(os.path.join(d, ".done")):
+        return [furl(os.path.join(d, f)) for f in sorted(os.listdir(d)) if f.lower().endswith(IMG_EXT)]
     return source(src).pages(rest, saver)
 
 
-# ------------------------------------------------------------ downloads (md only)
+# ------------------------------------------------------------ downloads (all sources)
+QF = DATA + "/dlqueue.json"
+QPID = CACHE + "/dlq.pid"
+
+
+def dl_dir_cid(cid):
+    src, rest = split(cid)
+    if src == "md" and UUID.match(rest):
+        return os.path.join(DL, rest)
+    return os.path.join(DL, "x_" + hashlib.sha1(cid.encode()).hexdigest()[:24])
+
+
 def dl_state(d, **kw):
     with open(os.path.join(d, ".status"), "w") as f:
         json.dump(kw, f)
 
 
+def _url_ext(u):
+    try:
+        p = urllib.parse.urlparse(u)
+        if p.hostname == "127.0.0.1" and p.path == "/image":
+            q = urllib.parse.parse_qs(p.query).get("u")
+            if q:
+                p = urllib.parse.urlparse(q[0])
+        ext = os.path.splitext(p.path)[1].lower()
+    except Exception:
+        ext = ""
+    return ext if ext in IMG_EXT else ".jpg"
+
+
+def _dl_fetch(u, fp):
+    for attempt in range(3):
+        try:
+            req = urllib.request.Request(u, headers={"User-Agent": UA})
+            with urllib.request.urlopen(req, timeout=40) as r, open(fp + ".part", "wb") as f:
+                shutil.copyfileobj(r, f)
+            os.replace(fp + ".part", fp)
+            return
+        except Exception:
+            if attempt == 2:
+                raise
+            p = urllib.parse.urlparse(u)
+            if p.hostname == "127.0.0.1" and p.path == "/image":
+                try:
+                    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/manga_sources")
+                    import _nyora_core
+                    u = _nyora_core._base() + "/image?" + p.query
+                except Exception:
+                    pass
+            time.sleep(2)
+
+
+class _DlErr(Exception):
+    def __init__(self, page, cause):
+        Exception.__init__(self, str(cause))
+        self.page = page
+        self.cause = cause
+
+
+def _explain(e):
+    import socket
+    import urllib.error
+    msg = str(e)
+    if isinstance(e, urllib.error.HTTPError):
+        c = e.code
+        body = ""
+        try:
+            body = e.read().decode("utf-8", "ignore")[:200]
+        except Exception:
+            pass
+        if c == 502 and "HTTP 403" in body:
+            return "The source's image server is blocking downloads (HTTP 403 via the Nyora helper). This source cannot be downloaded or read right now."
+        if c in (401, 403):
+            return "The source refused the request (HTTP %d). The site may be blocking downloads or its CDN is protected." % c
+        if c == 404:
+            return "The page was not found on the source (HTTP 404). The chapter may have been removed or the link expired."
+        if c == 429:
+            return "The source is rate limiting you (HTTP 429). Wait a few minutes and retry."
+        if c >= 500:
+            return "The source server had an error (HTTP %d). Try again later." % c
+        return "The source answered with HTTP error %d." % c
+    if isinstance(e, urllib.error.URLError):
+        r = getattr(e, "reason", None)
+        if isinstance(r, ConnectionRefusedError) or "Connection refused" in msg:
+            return "Could not reach the Nyora helper (connection refused). It may have stopped; retry to restart it."
+        if isinstance(r, socket.gaierror):
+            return "No internet connection (DNS lookup failed)."
+        if isinstance(r, (socket.timeout, TimeoutError)):
+            return "The source took too long to respond (timeout)."
+        return "Network error: %s" % (r or msg)
+    if isinstance(e, (socket.timeout, TimeoutError)):
+        return "The source took too long to respond (timeout)."
+    if "no pages" in msg.lower():
+        return "The source returned no pages for this chapter."
+    if isinstance(e, ConnectionError) or "Remote end closed" in msg:
+        return "The connection was closed by the source or the Nyora helper mid-transfer."
+    if isinstance(e, OSError) and getattr(e, "errno", None) == 28:
+        return "The disk is full."
+    if isinstance(e, PermissionError):
+        return "Permission denied writing to the downloads folder."
+    return "%s: %s" % (type(e).__name__, msg[:160])
+
+
 def do_download(cid, saver):
     src, rest = split(cid)
-    if src != "md" or not UUID.match(rest):
+    if src == "local":
         return
-    d = dl_dir(rest)
+    d = dl_dir_cid(cid)
     os.makedirs(d, exist_ok=True)
+    total = 0
+    done = [0]
     try:
-        urls = SOURCES["md"].pages(rest, saver)
-        dl_state(d, status="running", done=0, total=len(urls))
-        for i, u in enumerate(urls):
-            ext = os.path.splitext(urllib.parse.urlparse(u).path)[1].lower()
-            if ext not in IMG_EXT:
-                ext = ".jpg"
-            fp = os.path.join(d, "%04d%s" % (i + 1, ext))
-            if not os.path.exists(fp):
-                req = urllib.request.Request(u, headers={"User-Agent": UA})
-                with urllib.request.urlopen(req, timeout=30) as r, open(fp + ".part", "wb") as f:
-                    shutil.copyfileobj(r, f)
-                os.replace(fp + ".part", fp)
-            dl_state(d, status="running", done=i + 1, total=len(urls))
+        with open(os.path.join(d, ".id"), "w") as f:
+            f.write(cid)
+        dl_state(d, status="running", done=0, total=0)
+        urls = source(src).pages(rest, saver)
+        total = len(urls)
+        if total == 0:
+            raise ValueError("no pages")
+        dl_state(d, status="running", done=0, total=total)
+        from concurrent.futures import ThreadPoolExecutor
+
+        def one(i):
+            try:
+                fp = os.path.join(d, "%04d%s" % (i + 1, _url_ext(urls[i])))
+                if not os.path.exists(fp):
+                    _dl_fetch(urls[i], fp)
+            except Exception as e:
+                raise _DlErr(i + 1, e)
+            done[0] += 1
+            dl_state(d, status="running", done=done[0], total=total)
+
+        with ThreadPoolExecutor(3) as ex:
+            list(ex.map(one, range(total)))
         open(os.path.join(d, ".done"), "w").close()
-        dl_state(d, status="done", done=len(urls), total=len(urls))
+        dl_state(d, status="done", done=total, total=total)
     except Exception as e:
-        dl_state(d, status="error", error=str(e))
+        cause = e.cause if isinstance(e, _DlErr) else e
+        msg = _explain(cause)
+        if isinstance(e, _DlErr):
+            msg = "Page %d of %d: %s" % (e.page, total, msg)
+        dl_state(d, status="error", error=msg, detail="%s: %s" % (type(cause).__name__, str(cause)[:200]),
+                 done=done[0], total=total, ts=int(time.time()))
 
 
 def cmd_download(cid, saver):
     src, rest = split(cid)
-    if src != "md":
-        return {"ok": False, "error": "only MangaDex chapters can be downloaded"}
+    if src == "local":
+        return {"ok": False, "error": "local chapters are already offline"}
     subprocess.Popen([sys.executable, os.path.abspath(__file__), "_dl", cid, "saver" if saver else "full"],
                      start_new_session=True, stdin=subprocess.DEVNULL,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return {"ok": True, "status": "started"}
 
 
+def _q_load():
+    try:
+        return json.load(open(QF))
+    except Exception:
+        return {"saver": False, "ids": []}
+
+
+def _q_save(q):
+    with open(QF + ".tmp", "w") as f:
+        json.dump(q, f)
+    os.replace(QF + ".tmp", QF)
+
+
+def _q_alive():
+    try:
+        os.kill(int(open(QPID).read().strip()), 0)
+        return True
+    except Exception:
+        return False
+
+
+def _q_start():
+    if not _q_alive():
+        subprocess.Popen([sys.executable, os.path.abspath(__file__), "_dlq"],
+                         start_new_session=True, stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def _chapter_meta(mid):
+    out = {}
+    try:
+        for c in cache_get("ch:" + mid) or []:
+            out[c["id"]] = c
+    except Exception:
+        pass
+    return out
+
+
+def cmd_dl_queue(mode, mid, mtitle, cids):
+    q = _q_load()
+    q["saver"] = (mode == "saver")
+    have = set(q["ids"])
+    cm = _chapter_meta(mid)
+    n = 0
+    for c in cids:
+        if c in have or c.startswith("local:"):
+            continue
+        d = dl_dir_cid(c)
+        if os.path.exists(os.path.join(d, ".done")):
+            continue
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, ".id"), "w") as f:
+            f.write(c)
+        ch = cm.get(c, {})
+        with open(os.path.join(d, ".meta"), "w") as f:
+            json.dump({"cid": c, "mid": mid, "manga": mtitle, "num": ch.get("num"), "title": ch.get("title", "")}, f)
+        dl_state(d, status="queued")
+        q["ids"].append(c)
+        have.add(c)
+        n += 1
+    _q_save(q)
+    if n:
+        _q_start()
+    return {"ok": True, "queued": n}
+
+
+def cmd_dl_retry(cids):
+    q = _q_load()
+    have = set(q["ids"])
+    n = 0
+    for c in cids:
+        if c in have:
+            continue
+        d = dl_dir_cid(c)
+        if os.path.exists(os.path.join(d, ".done")):
+            continue
+        os.makedirs(d, exist_ok=True)
+        dl_state(d, status="queued")
+        q["ids"].append(c)
+        have.add(c)
+        n += 1
+    _q_save(q)
+    if n:
+        _q_start()
+    return {"ok": True, "queued": n}
+
+
+def cmd_dl_clear_failed():
+    alive = _q_alive()
+    n = 0
+    for name in os.listdir(DL):
+        d = os.path.join(DL, name)
+        if not os.path.isdir(d) or os.path.exists(os.path.join(d, ".done")):
+            continue
+        try:
+            st = json.load(open(os.path.join(d, ".status")))
+        except Exception:
+            st = {}
+        s = st.get("status")
+        if s == "error" or (s in ("running", "queued") and not alive):
+            shutil.rmtree(d, ignore_errors=True)
+            n += 1
+    return {"ok": True, "removed": n}
+
+
+def cmd_dl_info():
+    q = _q_load()
+    if q["ids"]:
+        _q_start()
+    alive = _q_alive() or bool(q["ids"])
+    qpos = {c: i for i, c in enumerate(q["ids"])}
+    items, summ = [], {"queued": 0, "running": 0, "failed": 0, "done": 0}
+    for name in os.listdir(DL):
+        d = os.path.join(DL, name)
+        if not os.path.isdir(d):
+            continue
+        if os.path.exists(os.path.join(d, ".done")):
+            summ["done"] += 1
+            continue
+        try:
+            st = json.load(open(os.path.join(d, ".status")))
+        except Exception:
+            continue
+        try:
+            meta = json.load(open(os.path.join(d, ".meta")))
+        except Exception:
+            meta = {}
+        try:
+            cid = open(os.path.join(d, ".id")).read().strip()
+        except Exception:
+            cid = meta.get("cid") or ("md:" + name)
+        status = st.get("status", "none")
+        err = st.get("error", "")
+        if status in ("running", "queued") and not alive:
+            status = "error"
+            err = "Interrupted: the download worker stopped before finishing (the app was closed or crashed). Press RETRY to resume where it left off."
+        if status not in ("running", "queued", "error"):
+            continue
+        summ["failed" if status == "error" else status] += 1
+        items.append({"cid": cid, "manga": meta.get("manga", ""), "num": meta.get("num"), "title": meta.get("title", ""),
+                      "status": status, "done": st.get("done", 0), "total": st.get("total", 0),
+                      "error": err, "ts": st.get("ts", 0)})
+    order = {"running": 0, "queued": 1, "error": 2}
+    items.sort(key=lambda e: (order[e["status"]], qpos.get(e["cid"], 1e9), -(e.get("ts") or 0)))
+    return {"items": items, "summary": summ}
+
+
+def run_queue():
+    import fcntl
+    lf = open(QPID, "a+")
+    try:
+        fcntl.flock(lf, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return
+    lf.seek(0)
+    lf.truncate()
+    lf.write(str(os.getpid()))
+    lf.flush()
+    while True:
+        q = _q_load()
+        if not q["ids"]:
+            time.sleep(1)
+            if not _q_load()["ids"]:
+                break
+            continue
+        cid = q["ids"].pop(0)
+        _q_save(q)
+        if os.path.exists(os.path.join(dl_dir_cid(cid), ".done")):
+            continue
+        do_download(cid, q.get("saver", False))
+
+
 def cmd_dl_status(cid):
-    src, rest = split(cid)
-    d = dl_dir(rest)
+    d = dl_dir_cid(cid)
     if os.path.exists(os.path.join(d, ".done")):
         return {"status": "done"}
     try:
@@ -503,16 +786,29 @@ def cmd_dl_status(cid):
 
 def cmd_dl_list():
     out = []
-    for n in os.listdir(DL):
-        if os.path.exists(os.path.join(DL, n, ".done")):
-            out.append("md:" + n)
+    for n in sorted(os.listdir(DL)):
+        d = os.path.join(DL, n)
+        if not os.path.isdir(d):
+            continue
+        try:
+            cid = open(os.path.join(d, ".id")).read().strip()
+        except Exception:
+            cid = "md:" + n
+        if os.path.exists(os.path.join(d, ".done")):
+            out.append(cid)
+        else:
+            try:
+                if json.load(open(os.path.join(d, ".status"))).get("status") == "error":
+                    out.append("!" + cid)
+            except Exception:
+                pass
     return out
 
 
 def cmd_dl_rm(cid):
-    src, rest = split(cid)
-    if UUID.match(rest):
-        shutil.rmtree(dl_dir(rest), ignore_errors=True)
+    d = dl_dir_cid(cid)
+    if os.path.dirname(d) == DL:
+        shutil.rmtree(d, ignore_errors=True)
     return {"ok": True}
 
 
@@ -552,12 +848,22 @@ def cmd_lib_rm(mid):
     return {"ok": True}
 
 
-def cmd_progress(mid, cid, num, page):
+def cmd_progress(mid, cid, num, page, cts=None, title=None, cover=None, kind=None):
     d = load()
     m = d["manga"].get(mid)
     if m is None:
-        return {"ok": False}
-    m["last"] = {"chapter_id": cid, "num": num, "page": int(page), "ts": int(time.time())}
+        if title is None:
+            return {"ok": False}
+        m = d["manga"].setdefault(mid, {"title": title, "cover": cover or "", "kind": kind or "",
+                                        "added": int(time.time()), "last": None, "read": []})
+    try:
+        c = int(float(cts)) if cts is not None else 0
+    except ValueError:
+        c = 0
+    last = m.get("last") or {}
+    if c and c < int(last.get("cts", 0)):
+        return {"ok": True, "stale": True}
+    m["last"] = {"chapter_id": cid, "num": num, "page": int(page), "ts": int(time.time()), "cts": c}
     save(d)
     return {"ok": True}
 
@@ -587,6 +893,11 @@ def main():
         print(json.dumps({"error": "usage"}))
         return 1
     c, r = a[0], a[1:]
+    lockf = None
+    if c in ("lib-add", "lib-rm", "progress", "read", "cfg", "cfg-reset"):
+        import fcntl
+        lockf = open(DATA + "/.lib.lock", "a+")
+        fcntl.flock(lockf, fcntl.LOCK_EX)
     try:
         if c == "sources":
             out = cmd_sources()
@@ -607,6 +918,17 @@ def main():
             out = cmd_dl_status(r[0])
         elif c == "dl-list":
             out = cmd_dl_list()
+        elif c == "dl-queue" and len(r) >= 4:
+            out = cmd_dl_queue(r[0], r[1], r[2], r[3:])
+        elif c == "dl-info":
+            out = cmd_dl_info()
+        elif c == "dl-retry" and r:
+            out = cmd_dl_retry(r)
+        elif c == "dl-clear-failed":
+            out = cmd_dl_clear_failed()
+        elif c == "_dlq":
+            run_queue()
+            out = {"ok": True}
         elif c == "dl-rm" and r:
             out = cmd_dl_rm(r[0])
         elif c == "_dl" and r:
@@ -621,7 +943,7 @@ def main():
         elif c == "lib-rm" and r:
             out = cmd_lib_rm(r[0])
         elif c == "progress" and len(r) >= 4:
-            out = cmd_progress(r[0], r[1], r[2], r[3])
+            out = cmd_progress(*r[:8])
         elif c == "read" and len(r) >= 2:
             out = cmd_read(r[0], r[1])
         elif c == "cfg-reset":

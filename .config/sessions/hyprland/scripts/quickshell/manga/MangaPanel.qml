@@ -52,6 +52,7 @@ Item {
     property bool shown: false
     property string tab: "library"
     property string query: ""
+    property bool dlMenu: false
     property var groups: {
         if (src !== "all") return []
         var g = [], idx = ({})
@@ -218,6 +219,7 @@ Item {
         chProc.running = true
     }
     function openManga(item) {
+        dlMenu = false
         cur = item
         detailOpen = true
         chapters = []
@@ -276,6 +278,7 @@ Item {
         rpages = []
         rLoading = true
         readerOpen = true
+        pgPending = rStart
         autoAdd()
         pagesCmd = ["python3", script, "pages", rch.id].concat(cfg.saver === true ? ["saver"] : [])
         pagesProc.running = true
@@ -294,11 +297,15 @@ Item {
         root.forceActiveFocus()
     }
     function savePage(idx) { pgPending = idx; progT.restart() }
+    function sendProgress(page) {
+        if (!cur || !rch) return
+        var args = ["python3", script, "progress", cur.id, rch.id, String(rch.num), String(page), String(Date.now())]
+        if (cb("auto_add", true)) args = args.concat([cur.title ? cur.title : "", cur.cover ? cur.cover : "", cur.kind ? cur.kind : ""])
+        Quickshell.execDetached(args)
+    }
     function doProgress() {
         if (!cur || !rch || pgPending < 0) return
-        Quickshell.execDetached(["python3", script, "progress", cur.id, rch.id, rch.num, String(pgPending)])
-        if (mstate)
-            mstate = ({ id: mstate.id, inlib: true, read: mstate.read, last: { chapter_id: rch.id, num: rch.num, page: pgPending } })
+        sendProgress(pgPending)
     }
     function flushProgress() { if (progT.running) { progT.stop(); doProgress() } }
     function markRead() {
@@ -327,11 +334,34 @@ Item {
     }
     function download(ch) {
         if (dlSet[ch.id] || dlBusy[ch.id]) return
-        Quickshell.execDetached(["python3", script, "download", ch.id].concat(cfg.saver === true ? ["saver"] : []))
+        Quickshell.execDetached(["python3", script, "dl-queue", cfg.saver === true ? "saver" : "full", cur ? cur.id : "", cur ? cur.title : "", ch.id])
         var b = {}
         for (var k in dlBusy) b[k] = dlBusy[k]
         b[ch.id] = true
         dlBusy = b
+        dlPoll.start()
+    }
+    function dlCandidates(mode) {
+        var start = continueIdx()
+        if (start < 0) start = 0
+        var out = []
+        for (var i = mode === "unread" ? 0 : start; i < chapters.length; i++) {
+            var c = chapters[i]
+            if (readSet[c.id] || dlSet[c.id] || dlBusy[c.id]) continue
+            out.push(c)
+            if (mode !== "unread" && out.length >= mode) break
+        }
+        return out
+    }
+    function dlPick(mode) {
+        var list = dlCandidates(mode)
+        if (list.length === 0) { toast("NOTHING TO DOWNLOAD"); return }
+        var ids = [], b = {}
+        for (var k in dlBusy) b[k] = dlBusy[k]
+        for (var i = 0; i < list.length; i++) { ids.push(list[i].id); b[list[i].id] = true }
+        dlBusy = b
+        Quickshell.execDetached(["python3", script, "dl-queue", cfg.saver === true ? "saver" : "full", cur ? cur.id : "", cur ? cur.title : ""].concat(ids))
+        toast("QUEUED " + ids.length + " CHAPTER" + (ids.length === 1 ? "" : "S"))
         dlPoll.start()
     }
     function removeDownload(ch) {
@@ -341,6 +371,8 @@ Item {
         dlSet = d
     }
 
+    Component.onDestruction: { if (readerOpen) doProgress() }
+    onVisibleChanged: if (!visible && readerOpen) doProgress()
     Component.onCompleted: {
         showT.start()
         sourcesProc.running = true
@@ -351,7 +383,7 @@ Item {
     Timer { id: showT; interval: 40; onTriggered: root.shown = true }
     Timer { id: toastT; interval: 3200; onTriggered: root.toastText = "" }
     Timer { id: libRefresh; interval: 600; onTriggered: root.loadLib() }
-    Timer { id: progT; interval: 700; onTriggered: root.doProgress() }
+    Timer { id: progT; interval: 350; onTriggered: root.doProgress() }
     Timer { id: confirmT; interval: 3000; onTriggered: root.confirmRm = false }
     Timer { id: searchT; interval: 450; onTriggered: root.loadList() }
     Timer { id: reloadT; interval: 450; onTriggered: { root.results = []; root.loadList() } }
@@ -379,7 +411,8 @@ Item {
 
     Keys.onPressed: function (e) {
         if (e.key === Qt.Key_Escape) {
-            if (root.detailOpen) root.detailOpen = false
+            if (root.dlMenu) root.dlMenu = false
+            else if (root.detailOpen) root.detailOpen = false
             else if (root.tab === "settings" && settingsPage.back()) { }
             else Quickshell.execDetached(["bash", root.home + "/.config/hypr/scripts/qs_manager.sh", "close"])
         }
@@ -491,7 +524,7 @@ Item {
                 for (var i = 0; i < d.length; i++) m[d[i]] = true
                 root.dlSet = m
                 var b = {}, left = 0
-                for (var k in root.dlBusy) if (!m[k]) { b[k] = true; left++ }
+                for (var k in root.dlBusy) if (!m[k] && !m["!" + k]) { b[k] = true; left++ }
                 root.dlBusy = b
                 if (left === 0) dlPoll.stop()
             }
@@ -504,7 +537,7 @@ Item {
             onStreamFinished: {
                 var d = root.parse(text, null)
                 root.rLoading = false
-                if (Array.isArray(d) && d.length > 0) root.rpages = d
+                if (Array.isArray(d) && d.length > 0) { root.rpages = d; root.sendProgress(root.rStart) }
                 else {
                     root.toast(d && d.error ? String(d.error) : "NO PAGES RETURNED")
                     root.closeReader()
@@ -1024,7 +1057,23 @@ Item {
                     Text { anchors.verticalCenter: parent.verticalCenter
                            text: "CHAPTERS  " + root.chapters.length; color: root.pink
                            font.family: root.mono; font.pixelSize: root.fs(11); font.bold: true; font.letterSpacing: root.s(2) }
-                    Rectangle {
+                    MBtn {
+                        id: dlBtn
+                        anchors { right: jumpBox.left; rightMargin: root.s(8); verticalCenter: parent.verticalCenter }
+                        hub: root; height: root.s(26)
+                        label: "DOWNLOAD  v"
+                        accent: root.sapphire
+                        solid: root.dlMenu
+                        enabled: root.chapters.length > 0
+                        onClicked: {
+                            var p = dlBtn.mapToItem(detail, 0, dlBtn.height)
+                            dlPop.x = Math.max(0, p.x + dlBtn.width - dlPop.width)
+                            dlPop.y = p.y + root.s(4)
+                            root.dlMenu = !root.dlMenu
+                        }
+                    }
+                    
+Rectangle {
                         anchors { right: orderBtn.left; rightMargin: root.s(8); verticalCenter: parent.verticalCenter }
                         id: jumpBox
                         width: root.s(190); height: Math.max(root.s(26), jumpIn.contentHeight + root.s(14)); radius: root.s(7)
@@ -1050,6 +1099,42 @@ Item {
                            hub: root; height: root.s(26); label: root.chRev ? "NEWEST FIRST" : "OLDEST FIRST"; accent: root.mauve
                            onClicked: root.chRev = !root.chRev }
                 }
+                MouseArea { anchors.fill: parent; z: 28; visible: root.dlMenu; onClicked: root.dlMenu = false }
+                Rectangle {
+                    id: dlPop
+                    z: 30
+                    visible: root.dlMenu && root.detailOpen
+                    width: root.s(340)
+                    height: dlCol.height + root.s(12)
+                    radius: root.s(10)
+                    color: root.crust
+                    border.width: 1; border.color: root.sapphire
+                    Column {
+                        id: dlCol
+                        x: root.s(6); y: root.s(6)
+                        width: parent.width - root.s(12)
+                        spacing: root.s(3)
+                        Repeater {
+                            model: [{ m: 1, l: "NEXT CHAPTER" }, { m: 5, l: "NEXT 5 CHAPTERS" }, { m: 25, l: "NEXT 25 CHAPTERS" }, { m: "unread", l: "UNREAD CHAPTERS" }]
+                            delegate: Rectangle {
+                                id: dopt
+                                required property var modelData
+                                readonly property int n: root.dlCandidates(modelData.m).length
+                                width: dlCol.width; height: root.s(34); radius: root.s(7)
+                                color: dma.containsMouse ? Qt.alpha(root.surface1, 0.6) : "transparent"
+                                opacity: n > 0 ? 1 : 0.4
+                                Text { anchors { left: parent.left; leftMargin: root.s(12); verticalCenter: parent.verticalCenter }
+                                       text: dopt.modelData.l; color: root.text
+                                       font.family: root.mono; font.pixelSize: root.fs(10); font.bold: true }
+                                Text { anchors { right: parent.right; rightMargin: root.s(12); verticalCenter: parent.verticalCenter }
+                                       text: dopt.n; color: root.sapphire
+                                       font.family: root.mono; font.pixelSize: root.fs(10); font.bold: true }
+                                MouseArea { id: dma; anchors.fill: parent; hoverEnabled: true
+                                            onClicked: { root.dlMenu = false; root.dlPick(dopt.modelData.m) } }
+                            }
+                        }
+                    }
+                }
                 ListView {
                     id: chList
                     anchors { left: parent.left; right: parent.right; top: chHead.bottom; bottom: parent.bottom; topMargin: root.s(6) }
@@ -1065,7 +1150,7 @@ Item {
                         readonly property bool isCur: !!(root.mstate && root.mstate.last && root.mstate.last.chapter_id === modelData.id)
                         readonly property bool isDl: !!root.dlSet[modelData.id]
                         readonly property bool isBusy: !!root.dlBusy[modelData.id]
-                        readonly property bool canDl: modelData.id.indexOf("md:") === 0
+                        readonly property bool canDl: modelData.id.indexOf("local:") !== 0
                         width: ListView.view.width - root.s(22)
                         height: root.s(44)
                         radius: root.s(8)
