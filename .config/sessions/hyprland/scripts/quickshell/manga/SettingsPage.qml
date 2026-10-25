@@ -367,8 +367,6 @@ Item {
                           onMoved: function (v) { sp.hub.setCfgLocal("scroll_step", v) }; onReleased: sp.hub.commitCfg("scroll_step") } }
                 SRow { hub: sp.hub; label: "Data saver"; hint: "smaller images, less bandwidth"
                     Tgl { hub: sp.hub; on: sp.hub.cb("saver", false); onFlipped: sp.hub.setCfg("saver", !on) } }
-                SRow { hub: sp.hub; label: "Sharpen pages"; hint: "resample to panel width, cached"
-                    Tgl { hub: sp.hub; on: sp.hub.cb("enhance", true); onFlipped: sp.hub.setCfg("enhance", !on) } }
                 SRow { hub: sp.hub; label: "Auto-open next chapter"
                     Tgl { hub: sp.hub; on: sp.hub.cb("auto_next", true); onFlipped: sp.hub.setCfg("auto_next", !on) } }
                 SRow { hub: sp.hub; label: "Mark read at chapter end"

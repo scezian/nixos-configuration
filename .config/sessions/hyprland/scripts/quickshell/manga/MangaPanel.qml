@@ -101,9 +101,6 @@ Item {
     property int rStart: 0
     property bool rLoading: false
     property var pagesCmd: []
-    property var rEnh: ({})
-    property var enhCmd: []
-    property bool enhAgain: false
     property int pgPending: -1
     property string toastText: ""
 
@@ -277,23 +274,12 @@ Item {
         rch = chapters[i]
         rStart = page || 0
         rpages = []
-        rEnh = ({})
-        stopEnhance()
         rLoading = true
         readerOpen = true
         autoAdd()
         pagesCmd = ["python3", script, "pages", rch.id].concat(cfg.saver === true ? ["saver"] : [])
         pagesProc.running = true
     }
-    function startEnhance() {
-        if (!readerOpen || !rch || rpages.length === 0) return
-        if (cb("enhance", true) === false || cfg.saver === true) return
-        if (enhProc.running) { enhAgain = true; enhProc.running = false; return }
-        rEnh = ({})
-        enhCmd = ["python3", script, "enhance", rch.id, String(reader.enhW()), String(rStart)]
-        enhProc.running = true
-    }
-    function stopEnhance() { enhAgain = false; if (enhProc.running) enhProc.running = false }
     function stepChapter(d) {
         flushProgress()
         var ni = rIdx + d
@@ -303,8 +289,6 @@ Item {
     function closeReader() {
         flushProgress()
         readerOpen = false
-        stopEnhance()
-        rEnh = ({})
         rpages = []
         libRefresh.restart()
         root.forceActiveFocus()
@@ -520,29 +504,13 @@ Item {
             onStreamFinished: {
                 var d = root.parse(text, null)
                 root.rLoading = false
-                if (Array.isArray(d) && d.length > 0) { root.rpages = d; Qt.callLater(root.startEnhance) }
+                if (Array.isArray(d) && d.length > 0) root.rpages = d
                 else {
                     root.toast(d && d.error ? String(d.error) : "NO PAGES RETURNED")
                     root.closeReader()
                 }
             }
         }
-    }
-
-    Process {
-        id: enhProc
-        command: root.enhCmd
-        stdout: SplitParser {
-            onRead: function (line) {
-                if (line.charAt(0) !== "E" || !root.rch) return
-                var p = line.split("\t")
-                if (p.length < 4 || p[1] !== root.rch.id) return
-                var m = Object.assign({}, root.rEnh)
-                m[p[2]] = p[3]
-                root.rEnh = m
-            }
-        }
-        onExited: if (root.enhAgain) { root.enhAgain = false; root.startEnhance() }
     }
 
     // ---------------- reusable card
@@ -1168,7 +1136,6 @@ Item {
             saver: root.cfg.saver === true
             scrollStep: root.cn("scroll_step", 160)
             stripWidth: root.cn("strip_width", 100) / 100
-            enh: root.rEnh
             autoNext: root.cb("auto_next", true)
             bgMode: root.cs("reader_bg", "theme")
             onCloseRequested: root.closeReader()
